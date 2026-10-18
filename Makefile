@@ -1,4 +1,4 @@
-# Makefile for nOS - Phase 5
+# Makefile for nOS - Phase 6a
 
 # Compiler and tools
 AS = nasm
@@ -14,8 +14,8 @@ LDFLAGS = -m elf_i386 -T linker.ld
 # Source files (boot.s must link first so the Multiboot header lands early).
 # NOTE: assembly ISR stubs live in isr_stubs.s (not isr.s) so they don't
 # collide with isr.c -> isr.o during compilation.
-ASM_SRC = boot.s gdt_flush.s idt_flush.s isr_stubs.s
-C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c vfs.c
+ASM_SRC = boot.s gdt_flush.s idt_flush.s isr_stubs.s swtch.s
+C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c vfs.c pit.c task.c
 
 # Object files
 ASM_OBJ = $(ASM_SRC:.s=.o)
@@ -63,7 +63,7 @@ $(ISO): $(KERNEL) $(INITRD)
 run: $(ISO)
 	qemu-system-i386 -cdrom $(ISO) -m 128M
 
-# Run in QEMU with serial output visible in the terminal (see PMM/heap/VFS/keyboard/mouse debug logs)
+# Run in QEMU with serial output visible in the terminal (PMM/heap/VFS/keyboard/mouse/task debug logs)
 run-serial: $(ISO)
 	qemu-system-i386 -cdrom $(ISO) -m 128M -serial stdio
 

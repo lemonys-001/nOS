@@ -1,6 +1,7 @@
-// kernel.c - nOS Kernel Entry Point (Phase 5)
-// Adds a minimal read-only VFS backed by a custom initrd format, loaded as
-// a GRUB multiboot module and parsed in vfs.c.
+// kernel.c - nOS Kernel Entry Point (Phase 6a)
+// Adds a PIT-driven preemptive round-robin scheduler. The GUI compositor
+// now runs as its own kernel task, alongside a second "monitor" task that
+// proves real preemption is happening via a serial heartbeat.
 
 #include <stdint.h>
 #include <stddef.h>
@@ -16,6 +17,8 @@
 #include "gfx.h"
 #include "compositor.h"
 #include "vfs.h"
+#include "pit.h"
+#include "task.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
 #define WIN7_BLUE 0x00A2ED
@@ -76,6 +79,21 @@ static void print_file_to_serial(const char *name) {
     serial_write("--------------------\n");
 }
 
+// Second kernel task: proves the scheduler is really preempting by
+// printing a heartbeat to serial independently of the compositor task.
+static void monitor_task(void) {
+    uint32_t tick = 0;
+    while (1) {
+        serial_write("[MONITOR] heartbeat #");
+        serial_write_hex(tick++);
+        serial_write(" free_frames=");
+        serial_write_hex(pmm_get_free_frames());
+        serial_write("\n");
+
+        for (volatile uint32_t i = 0; i < 20000000; i++) { }
+    }
+}
+
 void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     if (magic != MULTIBOOT_MAGIC) {
         while (1) { __asm__ volatile ("hlt"); }
@@ -85,10 +103,10 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
         while (1) { __asm__ volatile ("hlt"); }
     }
 
-    clear_screen(WIN7_BLUE); // immediate visual feedback before the GUI engine spins up
+    clear_screen(WIN7_BLUE);
 
     serial_init();
-    serial_write("\n=== nOS Phase 5: Virtual Filesystem ===\n");
+    serial_write("\n=== nOS Phase 6a: Preemptive Kernel Task Scheduler ===\n");
 
     gdt_install();
     serial_write("[OK] GDT installed\n");
@@ -105,9 +123,6 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     mouse_init();
     serial_write("[OK] Mouse driver initialized (IRQ12)\n");
 
-    __asm__ volatile ("sti");
-    serial_write("[OK] Interrupts enabled\n");
-
     pmm_init(mbi);
     serial_write("[OK] Physical memory manager initialized\n");
 
@@ -122,10 +137,22 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     gfx_init(framebuffer, fb_width, fb_height);
     serial_write("[OK] GFX double buffer allocated\n");
 
-    serial_write("[OK] Entering compositor render loop\n\n");
+    pit_install();
+    serial_write("[OK] PIT handler registered on IRQ0\n");
 
-    while (1) {
-        compositor_render();
-        gfx_swap();
-    }
+    __asm__ volatile ("sti");
+    serial_write("[OK] Interrupts enabled\n");
+
+    pit_init(100);
+    serial_write("[OK] PIT running at 100Hz\n");
+
+    tasking_init();
+    task_create("compositor", compositor_task);
+    task_create("monitor", monitor_task);
+
+    serial_write("[OK] Starting preemptive scheduler\n\n");
+    scheduler_start();
+
+    // Not reached: scheduler_start() hands control to the task threads above.
+    while (1) { __asm__ volatile ("hlt"); }
 }

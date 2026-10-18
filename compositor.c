@@ -1,6 +1,6 @@
 // compositor.c - Draws the desktop: background, a demo window, the taskbar
-// with a Start button, and a live PS/2-driven mouse cursor. Called every
-// frame from the kernel's main loop, then blitted to screen via gfx_swap().
+// with a Start button, and a live PS/2-driven mouse cursor. Runs as its own
+// preemptible kernel task (see task.c) so it no longer monopolizes the CPU.
 
 #include "compositor.h"
 #include "gfx.h"
@@ -27,8 +27,8 @@ static void draw_demo_window(void) {
     gfx_fill_rect(wx + ww - 24, wy, 24, 24, CLOSE_RED);
     gfx_draw_string(wx + ww - 18, wy + 8, "X", WHITE);
 
-    gfx_draw_string(wx + 12, wy + 40, "PHASE 4: GUI ENGINE ONLINE", 0x333333);
-    gfx_draw_string(wx + 12, wy + 56, "MOVE THE MOUSE - TYPE ON KEYBOARD", 0x333333);
+    gfx_draw_string(wx + 12, wy + 40, "PHASE 6: PREEMPTIVE SCHEDULER ONLINE", 0x333333);
+    gfx_draw_string(wx + 12, wy + 56, "MOVE THE MOUSE - CHECK SERIAL FOR TASK LOG", 0x333333);
 }
 
 static void draw_taskbar(void) {
@@ -38,7 +38,6 @@ static void draw_taskbar(void) {
 
     gfx_fill_rect(0, bar_y, (int)w, TASKBAR_HEIGHT, TASKBAR_COLOR);
 
-    // Start button
     gfx_fill_rect(4, bar_y + 4, 90, TASKBAR_HEIGHT - 8, START_COLOR);
     gfx_draw_string(16, bar_y + 14, "START", WHITE);
 }
@@ -47,7 +46,6 @@ static void draw_cursor(void) {
     int mx = mouse_get_x();
     int my = mouse_get_y();
 
-    // Simple crosshair-style cursor (real arrow bitmap comes later)
     gfx_fill_rect(mx, my, 2, 14, WHITE);
     gfx_fill_rect(mx, my, 14, 2, WHITE);
     gfx_fill_rect(mx + 1, my + 1, 1, 11, 0x000000);
@@ -59,4 +57,11 @@ void compositor_render(void) {
     draw_demo_window();
     draw_taskbar();
     draw_cursor();
+}
+
+void compositor_task(void) {
+    while (1) {
+        compositor_render();
+        gfx_swap();
+    }
 }
