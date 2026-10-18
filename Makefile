@@ -1,4 +1,4 @@
-# Makefile for nOS - Phase 7
+# Makefile for nOS - Phase 8
 
 # Compiler and tools
 AS = nasm
@@ -15,7 +15,7 @@ LDFLAGS = -m elf_i386 -T linker.ld
 # NOTE: assembly ISR stubs live in isr_stubs.s (not isr.s) so they don't
 # collide with isr.c -> isr.o during compilation.
 ASM_SRC = boot.s gdt_flush.s idt_flush.s isr_stubs.s swtch.s usermode.s
-C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c desktop.c vfs.c pit.c task.c syscall.c user_load.c
+C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c desktop.c nscript.c vfs.c pit.c task.c syscall.c user_load.c
 
 # Object files
 ASM_OBJ = $(ASM_SRC:.s=.o)

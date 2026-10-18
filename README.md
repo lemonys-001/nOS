@@ -11,31 +11,45 @@ A 32-bit graphical operating system built from scratch, mimicking the aesthetic 
 - Phase 5: Filesystem (initrd VFS) ✅
 - Phase 6a: Preemptive kernel task scheduler (PIT, context switching) ✅
 - Phase 6b: Ring 3, TSS, syscalls, flat-binary user program ✅
-- **Phase 7: Userland Apps (login, notepad, snake, settings)** ✅ Current
+- Phase 7: Userland Apps (login, notepad, snake, settings) ✅
+- **Phase 8: Multi-window GUI, File Manager, nScript interpreter + console** ✅ Current
 
-## Phase 7: Userland Apps
+## Phase 8: Better GUI, File Manager, nScript
 
-All four apps requested in the original roadmap, fully interactive:
+**Multi-window GUI upgrade.** Phase 7 showed one fixed-position window at a time. Now:
+- Multiple windows can be open simultaneously (up to 8), each independently positioned.
+- Drag any window by its title bar.
+- Click a window to bring it to the front (proper z-order); clicking its red X closes it.
+- Opening an app that's already open just focuses its existing window rather than creating a duplicate.
 
-- **Login screen** (`desktop.c`) — real text input with backspace and a masked password field; typing `nos` + Enter unlocks the desktop, anything else shows an error and clears the field.
-- **Notepad** — a real text buffer (1KB) driven by actual keystrokes: typing appends characters, Enter adds a line break, Backspace deletes, and the window renders it live, word-wrapped by line.
-- **Snake** — a real game: WASD-controlled grid movement, wall/self collision detection, food spawning via an xorshift PRNG, a growing body, a live score counter, and a game-over/restart (`R`) state. Movement is paced using `pit_get_ticks()` — the PIT's real hardware time base — so the game runs at a consistent speed regardless of how fast the render loop itself executes.
-- **Settings** — click a color swatch to change the live desktop background color immediately; the active color is outlined.
+**File Manager** (`APP_FILES` in `desktop.c`) lists every file in the initrd VFS (via new `vfs_file_count`/`vfs_file_name`/`vfs_file_size`/`vfs_read_index` accessors in `vfs.c`) and shows a live text preview of whichever file you click.
 
-All of this is driven by a real taskbar + Start menu (click Start, click an app name to launch it, click the red X to close it back to the desktop) with proper click-edge detection (a held mouse button doesn't repeat-trigger every frame).
+**nScript** (`nscript.c`/`.h`) is a small original Lua-inspired interpreter — explicitly **not** a port of real Lua. Real Lua needs `setjmp`/`longjmp`, floating-point (`libm`), and libc string/number formatting that this freestanding, no-libc kernel doesn't have; porting it without any way to actually compile-and-run it interactively would risk shipping something that looks complete but silently fails the first time someone types a command. nScript instead supports:
+- Integer variables, single lowercase letter names (`a`-`z`)
+- `+ - * / %`, comparisons (`== != < > <= >=`), parentheses, unary minus
+- `if cond then ... [else ...] end`, `while cond do ... end` (loop body re-evaluated from a saved text pointer each iteration — no AST, straightforward tree-walking interpreter; capped at 100,000 iterations so a runaway script can't hang the desktop forever)
+- `print(expr)` / `print("string")`
+- Two OS-control builtins: `setbg(n)` (0-4, matches the Settings app's swatches) and `launch("appname")` (`notepad`/`snake`/`settings`/`files`/`console`) — so a script can genuinely open apps and change the desktop, not just print numbers.
+- Statements on one line are separated by `;` (REPL-style, no multi-line programs)
 
-**Design notes / honest limitations:**
-- These apps run inside a single window-manager event loop (`desktop.c`, called every frame from the `compositor` kernel task), not as separate isolated ring-3 processes. True per-app isolation would need each app to be its own program with its own memory — architecturally possible given Phase 6b's ring-3/syscall work, but bundling that here would mean redoing memory/window management at the same time as hardening privilege separation, which is a worse place to introduce bugs than doing it as a dedicated next step.
-- The bitmap font (`font.c`) only has uppercase glyphs, so typed text (e.g. in Notepad) always displays in capitals, whatever case was typed.
-- Snake uses WASD rather than arrow keys, since arrow keys send extended (0xE0-prefixed) PS/2 scancodes that `keyboard.c` doesn't parse yet.
-- The login password is a hardcoded plaintext comparison (`nos`) — appropriate for a hobby OS demo, not a real security boundary.
+Run it from the new **Console** window (`APP_CONSOLE`), e.g.:
+```
+> x=5;print(x*2)
+10
+> i=0;while i<3 do print(i);i=i+1 end
+0
+1
+2
+> setbg(2)
+> launch("snake")
+```
 
 ### Try it
 
 ```bash
 make run
 ```
-Type `nos` and press Enter at the login screen, then click **START** in the taskbar to launch Notepad, Snake, or Settings.
+Log in with `nos`, click **START**, open a few apps, drag them around, then open **CONSOLE** and try the script above.
 
 ## Earlier phases
 
@@ -46,6 +60,7 @@ Type `nos` and press Enter at the login screen, then click **START** in the task
 - **Phase 5** — A custom initrd format (`tools/mkinitrd.py`), parsed read-only (`vfs.c`).
 - **Phase 6a** — PIT-driven preemption (`pit.c`), an xv6-style context switch (`swtch.s`), round-robin scheduler (`task.c`).
 - **Phase 6b** — TSS, `int 0x80` syscall gate, ring-3 privilege transition, a VFS-loaded flat-binary ring-3 demo program.
+- **Phase 7** — Login screen, Notepad, Snake, Settings (single fixed window).
 
 ### Files
 
@@ -64,8 +79,9 @@ heap.c                     Kernel heap (kmalloc/kfree)
 gfx.c                      Double-buffered drawing primitives
 font.c                     5x7 bitmap font (uppercase only)
 compositor.c               Task-loop wrapper around the window manager
-desktop.c                  Window manager + Login/Notepad/Snake/Settings apps
-vfs.c                      initrd parser / file reader
+desktop.c                  Multi-window manager + Login/Notepad/Snake/Settings/Files/Console apps
+nscript.c                  Small original Lua-inspired scripting interpreter
+vfs.c                      initrd parser / file reader (by-name and by-index)
 pit.c                      PIT timer driver (IRQ0) + tick counter
 task.c / swtch.s            Round-robin scheduler + context switch
 syscall.c                  int 0x80 syscall dispatcher
@@ -86,13 +102,13 @@ Makefile                   Build system (nasm + gcc -m32 + ld + grub-mkrescue + 
 sudo apt-get install build-essential gcc-multilib nasm xorriso grub-pc-bin qemu-system-x86 python3
 
 make
-make run           # login screen -> desktop with working Notepad/Snake/Settings
+make run           # login screen -> desktop with draggable windows: Notepad/Snake/Settings/Files/Console
 make run-serial     # also streams PMM/heap/VFS/task/syscall debug logs
 ```
 
 ## CI
 
-Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts.
+Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts. Note: CI only verifies the OS boots — it does not interact with the desktop, so GUI/script logic (like nScript) is verified by careful manual tracing rather than automated testing.
 
 ## License
 

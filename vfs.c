@@ -105,3 +105,23 @@ void vfs_list(void) {
         serial_write(" bytes)\n");
     }
 }
+
+uint32_t vfs_file_count(void) {
+    return entry_count;
+}
+
+const char *vfs_file_name(uint32_t index) {
+    if (index >= entry_count) return "";
+    return entries[index].name;
+}
+
+uint32_t vfs_file_size(uint32_t index) {
+    if (index >= entry_count) return 0;
+    return entries[index].size;
+}
+
+const uint8_t *vfs_read_index(uint32_t index, uint32_t *size_out) {
+    if (!vfs_ready || index >= entry_count) return NULL;
+    if (size_out) *size_out = entries[index].size;
+    return data_start + entries[index].offset;
+}
