@@ -1,4 +1,4 @@
-# Makefile for nOS - Phase 6b
+# Makefile for nOS - Phase 7
 
 # Compiler and tools
 AS = nasm
@@ -15,7 +15,7 @@ LDFLAGS = -m elf_i386 -T linker.ld
 # NOTE: assembly ISR stubs live in isr_stubs.s (not isr.s) so they don't
 # collide with isr.c -> isr.o during compilation.
 ASM_SRC = boot.s gdt_flush.s idt_flush.s isr_stubs.s swtch.s usermode.s
-C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c vfs.c pit.c task.c syscall.c user_load.c
+C_SRC = kernel.c gdt.c idt.c isr.c pic.c keyboard.c mouse.c serial.c pmm.c heap.c gfx.c font.c compositor.c desktop.c vfs.c pit.c task.c syscall.c user_load.c
 
 # Object files
 ASM_OBJ = $(ASM_SRC:.s=.o)
@@ -68,8 +68,7 @@ $(ISO): $(KERNEL) $(INITRD)
 run: $(ISO)
 	qemu-system-i386 -cdrom $(ISO) -m 128M
 
-# Run in QEMU with serial output visible in the terminal (all debug logs,
-# including the [USER]/[SYSCALL] lines from the ring-3 demo program)
+# Run in QEMU with serial output visible in the terminal
 run-serial: $(ISO)
 	qemu-system-i386 -cdrom $(ISO) -m 128M -serial stdio
 
