@@ -1,7 +1,6 @@
-// kernel.c - nOS Kernel Entry Point (Phase 6a)
-// Adds a PIT-driven preemptive round-robin scheduler. The GUI compositor
-// now runs as its own kernel task, alongside a second "monitor" task that
-// proves real preemption is happening via a serial heartbeat.
+// kernel.c - nOS Kernel Entry Point (Phase 6b)
+// Adds a TSS, an int 0x80 syscall gate, and a ring-3 "userland" task that
+// loads a tiny flat binary from the initrd and runs it in ring 3.
 
 #include <stdint.h>
 #include <stddef.h>
@@ -19,6 +18,8 @@
 #include "vfs.h"
 #include "pit.h"
 #include "task.h"
+#include "syscall.h"
+#include "user_load.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
 #define WIN7_BLUE 0x00A2ED
@@ -79,8 +80,6 @@ static void print_file_to_serial(const char *name) {
     serial_write("--------------------\n");
 }
 
-// Second kernel task: proves the scheduler is really preempting by
-// printing a heartbeat to serial independently of the compositor task.
 static void monitor_task(void) {
     uint32_t tick = 0;
     while (1) {
@@ -106,16 +105,19 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     clear_screen(WIN7_BLUE);
 
     serial_init();
-    serial_write("\n=== nOS Phase 6a: Preemptive Kernel Task Scheduler ===\n");
+    serial_write("\n=== nOS Phase 6b: Ring 3, TSS, Syscalls ===\n");
 
     gdt_install();
-    serial_write("[OK] GDT installed\n");
+    serial_write("[OK] GDT + TSS installed\n");
 
     idt_install();
     serial_write("[OK] IDT installed\n");
 
     isr_install();
     serial_write("[OK] ISRs/IRQs installed, PIC remapped\n");
+
+    syscall_install();
+    serial_write("[OK] Syscall gate installed (int 0x80)\n");
 
     keyboard_init();
     serial_write("[OK] Keyboard driver initialized (IRQ1)\n");
@@ -128,6 +130,10 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
 
     heap_init();
     serial_write("[OK] Kernel heap initialized\n");
+
+    uint8_t *ring3_kstack = (uint8_t *)kmalloc(8192);
+    tss_set_kernel_stack((uint32_t)(ring3_kstack + 8192));
+    serial_write("[OK] TSS kernel stack configured\n");
 
     vfs_init(mbi);
     vfs_list();
@@ -149,10 +155,10 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     tasking_init();
     task_create("compositor", compositor_task);
     task_create("monitor", monitor_task);
+    task_create("userland", user_task_entry);
 
     serial_write("[OK] Starting preemptive scheduler\n\n");
     scheduler_start();
 
-    // Not reached: scheduler_start() hands control to the task threads above.
     while (1) { __asm__ volatile ("hlt"); }
 }

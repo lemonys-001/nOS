@@ -20,4 +20,10 @@ struct gdt_ptr {
 void gdt_install(void);
 extern void gdt_flush(uint32_t);
 
+// Updates the TSS's esp0 field -- the kernel stack the CPU switches to
+// automatically whenever ring 3 code is interrupted (IRQ, exception, or
+// an int 0x80 syscall). Must be called with a valid, sufficiently large
+// stack before any ring 3 code runs.
+void tss_set_kernel_stack(uint32_t stack_top);
+
 #endif

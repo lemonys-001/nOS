@@ -1,9 +1,10 @@
-; isr_stubs.s - Low-level ISR/IRQ stubs. Each pushes an interrupt number
-; (and a dummy error code if the CPU doesn't push one itself) then
+; isr_stubs.s - Low-level ISR/IRQ/syscall stubs. Each pushes an interrupt
+; number (and a dummy error code if the CPU doesn't push one itself) then
 ; jumps to a common stub that calls into C.
 
 extern isr_handler
 extern irq_handler
+extern syscall_handler
 
 %macro ISR_NOERRCODE 1
 global isr%1
@@ -81,6 +82,14 @@ IRQ 13, 45
 IRQ 14, 46
 IRQ 15, 47
 
+; Syscall gate (int 0x80), DPL3-accessible -- see syscall.c for the gate setup.
+global isr128
+isr128:
+    cli
+    push dword 0
+    push dword 128
+    jmp syscall_common_stub
+
 isr_common_stub:
     pusha
 
@@ -119,6 +128,31 @@ irq_common_stub:
     mov gs, ax
 
     call irq_handler
+
+    pop eax
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    popa
+    add esp, 8
+    sti
+    iret
+
+syscall_common_stub:
+    pusha
+
+    mov ax, ds
+    push eax
+
+    mov ax, 0x10
+    mov ds, ax
+    mov es, ax
+    mov fs, ax
+    mov gs, ax
+
+    call syscall_handler
 
     pop eax
     mov ds, ax
