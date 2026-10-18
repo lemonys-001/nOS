@@ -6,6 +6,7 @@
 
 #include <stddef.h>
 #include "pmm.h"
+#include "multiboot.h"
 #include "serial.h"
 
 #define FRAME_SIZE   4096
@@ -28,6 +29,17 @@ static void bitmap_clear(uint32_t frame) {
 
 static int bitmap_test(uint32_t frame) {
     return (frame_bitmap[frame / 32] & (1u << (frame % 32))) != 0;
+}
+
+static void reserve_range(uint32_t start_addr, uint32_t end_addr) {
+    uint32_t start_frame = start_addr / FRAME_SIZE;
+    uint32_t end_frame = (end_addr + FRAME_SIZE - 1) / FRAME_SIZE;
+    for (uint32_t i = start_frame; i < end_frame && i < total_frames; i++) {
+        if (!bitmap_test(i)) {
+            bitmap_set(i);
+            free_frames--;
+        }
+    }
 }
 
 void pmm_init(struct multiboot_info *mbi) {
@@ -53,14 +65,16 @@ void pmm_init(struct multiboot_info *mbi) {
     }
 
     // Re-reserve the frames occupied by the kernel image itself
-    uint32_t kernel_start_frame = 0x100000 / FRAME_SIZE;
     uint32_t kernel_end_addr = (uint32_t)&_kernel_end;
-    uint32_t kernel_end_frame = (kernel_end_addr + FRAME_SIZE - 1) / FRAME_SIZE;
+    reserve_range(0x100000, kernel_end_addr);
 
-    for (uint32_t i = kernel_start_frame; i < kernel_end_frame && i < total_frames; i++) {
-        if (!bitmap_test(i)) {
-            bitmap_set(i);
-            free_frames--;
+    // Re-reserve frames occupied by any GRUB-loaded multiboot modules
+    // (e.g. the initrd) so the heap allocator can't later hand them out.
+    if (mbi->flags & (1 << 3)) {
+        struct multiboot_module *mods =
+            (struct multiboot_module *)(uintptr_t)mbi->mods_addr;
+        for (uint32_t m = 0; m < mbi->mods_count; m++) {
+            reserve_range(mods[m].mod_start, mods[m].mod_end);
         }
     }
 

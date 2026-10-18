@@ -6,17 +6,17 @@ A 32-bit graphical operating system built from scratch, mimicking the aesthetic 
 
 - Phase 1: Foundation (Boot & Graphics) ✅
 - Phase 2: Interrupts & Input (GDT, IDT, PS/2 keyboard/mouse) ✅
-- **Phase 3: Memory Management (PMM, heap)** ✅ Current
-- **Phase 4: GUI Engine (compositor, taskbar, cursor)** ✅ Current
-- Phase 5: Filesystem (initrd or FAT16) — not yet started
+- Phase 3: Memory Management (PMM, heap) ✅
+- Phase 4: GUI Engine (compositor, taskbar, cursor) ✅
+- **Phase 5: Filesystem (initrd VFS)** ✅ Current
 - Phase 6: Multitasking & User Space (syscalls, ELF loading, scheduler) — not yet started
 - Phase 7: Userland Apps (login, notepad, snake, settings) — not yet started
 
-> Phases 5-7 involve disk I/O, ELF loading, and a real preemptive scheduler with
-> hand-written context-switch assembly — these are being built incrementally and
-> tested in isolation rather than in one shot, since a single mistake there tends
-> to produce silent stack corruption or triple-fault reboots that are hard to
-> debug from CI logs alone.
+> Phases 6-7 involve a real preemptive scheduler with hand-written
+> context-switch assembly, syscalls, and ELF loading — these are being built
+> incrementally and tested in isolation, since a single mistake there tends
+> to produce silent stack corruption or triple-fault reboots that are hard
+> to debug from CI logs alone.
 
 ## Phase 1: Boot & Graphics
 
@@ -28,16 +28,21 @@ GDT, IDT, 8259 PIC remap, PS/2 keyboard + mouse drivers, COM1 serial debug outpu
 
 ## Phase 3: Memory Management
 
-- **`pmm.c`** — bitmap-based physical frame allocator (4KB frames). Frames below 1MB and those occupied by the kernel image are reserved at boot; everything else is available via `pmm_alloc_frame()` / `pmm_free_frame()`. No paging yet, so physical addresses are used directly as pointers.
-- **`heap.c`** — an 8MB kernel heap reserved from the PMM at boot, managed as an explicit first-fit free list (`kmalloc` / `kfree`, with basic adjacent-block coalescing on free).
+- **`pmm.c`** — bitmap-based physical frame allocator (4KB frames), reserving the kernel image and any GRUB-loaded modules at boot.
+- **`heap.c`** — an 8MB kernel heap managed as an explicit first-fit free list.
 
 ## Phase 4: GUI Engine
 
-- **`gfx.c`** — a heap-backed backbuffer with `gfx_fill_rect`, `gfx_put_pixel`, text drawing, and `gfx_swap()` to blit to the real framebuffer (eliminates flicker vs. drawing directly to video memory).
-- **`font.c`** — a compact 5x7 bitmap font (digits, A-Z, space, `-`, `:`, `.`).
-- **`compositor.c`** — renders the desktop every frame: Windows 7 blue background, a demo window with a title bar and close button, a taskbar with a Start button, and a live cursor tracking the PS/2 mouse driver from Phase 2.
+- **`gfx.c`** / **`font.c`** — double-buffered drawing primitives and a 5x7 bitmap font.
+- **`compositor.c`** — renders the desktop every frame: background, a demo window, a taskbar with a Start button, and a live PS/2-driven cursor.
 
-The kernel's main loop now continuously calls `compositor_render()` + `gfx_swap()` instead of halting — move the mouse or watch the cursor track in real time.
+## Phase 5: Filesystem (initrd VFS)
+
+- **`tools/mkinitrd.py`** — host-side tool that packs the `initrd/` directory into a small custom binary format (file count, then a `{name[32], size}` header table, then concatenated raw file bytes).
+- The Makefile builds `initrd.img` from that and passes it to GRUB as a multiboot module.
+- **`vfs.c`** — parses the module in-kernel (`vfs_init`), and exposes `vfs_read(name, &size)` / `vfs_list()`. Read-only, no directories yet — flat file list.
+- `pmm.c` now also reserves the frames occupied by any multiboot module, so the heap can never clobber initrd data.
+- At boot, the kernel lists the initrd contents and prints `config.txt` / `logo.txt` to the serial console as a smoke test.
 
 ### Files
 
@@ -56,25 +61,28 @@ heap.c                     Kernel heap (kmalloc/kfree)
 gfx.c                      Double-buffered drawing primitives
 font.c                     5x7 bitmap font
 compositor.c               Desktop rendering: taskbar, Start button, window, cursor
+vfs.c                      initrd parser / file reader
+tools/mkinitrd.py          Host-side initrd packer (run by the Makefile)
+initrd/                    Files that get packed into initrd.img
 include/                   Headers for all of the above
 linker.ld                  Links the kernel at 1MB
-Makefile                   Build system (nasm + gcc -m32 + ld + grub-mkrescue)
+Makefile                   Build system (nasm + gcc -m32 + ld + grub-mkrescue + mkinitrd.py)
 ```
 
 ### Build & Run
 
 ```bash
 # Ubuntu/Debian dependencies
-sudo apt-get install build-essential gcc-multilib nasm xorriso grub-pc-bin qemu-system-x86
+sudo apt-get install build-essential gcc-multilib nasm xorriso grub-pc-bin qemu-system-x86 python3
 
 make
 make run           # graphical desktop: taskbar, Start button, demo window, live cursor
-make run-serial     # also prints PMM/heap/keyboard/mouse debug output to your terminal
+make run-serial     # also prints PMM/heap/VFS/keyboard/mouse debug output to your terminal
 ```
 
 ## CI
 
-Every push to `main` triggers a GitHub Actions build that compiles the kernel, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts.
+Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log (which now includes the VFS file listing and file contents) as workflow artifacts.
 
 ## License
 

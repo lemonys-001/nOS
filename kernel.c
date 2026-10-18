@@ -1,7 +1,6 @@
-// kernel.c - nOS Kernel Entry Point (Phase 3 + 4)
-// Adds physical memory management, a kernel heap, and a live GUI compositor
-// (double-buffered desktop with taskbar, Start button, a demo window, and
-// a PS/2-driven cursor).
+// kernel.c - nOS Kernel Entry Point (Phase 5)
+// Adds a minimal read-only VFS backed by a custom initrd format, loaded as
+// a GRUB multiboot module and parsed in vfs.c.
 
 #include <stdint.h>
 #include <stddef.h>
@@ -16,6 +15,7 @@
 #include "heap.h"
 #include "gfx.h"
 #include "compositor.h"
+#include "vfs.h"
 
 #define MULTIBOOT_MAGIC 0x2BADB002
 #define WIN7_BLUE 0x00A2ED
@@ -60,6 +60,22 @@ static void clear_screen(uint32_t color) {
     }
 }
 
+static void print_file_to_serial(const char *name) {
+    uint32_t size = 0;
+    const uint8_t *data = vfs_read(name, &size);
+    serial_write("[VFS] ");
+    serial_write(name);
+    if (!data) {
+        serial_write(" -> not found\n");
+        return;
+    }
+    serial_write(" -> \n--------------------\n");
+    for (uint32_t i = 0; i < size; i++) {
+        serial_write_char((char)data[i]);
+    }
+    serial_write("--------------------\n");
+}
+
 void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     if (magic != MULTIBOOT_MAGIC) {
         while (1) { __asm__ volatile ("hlt"); }
@@ -72,7 +88,7 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
     clear_screen(WIN7_BLUE); // immediate visual feedback before the GUI engine spins up
 
     serial_init();
-    serial_write("\n=== nOS Phase 3 + 4: Memory & GUI Engine ===\n");
+    serial_write("\n=== nOS Phase 5: Virtual Filesystem ===\n");
 
     gdt_install();
     serial_write("[OK] GDT installed\n");
@@ -97,6 +113,11 @@ void kernel_main(uint32_t magic, struct multiboot_info *mbi) {
 
     heap_init();
     serial_write("[OK] Kernel heap initialized\n");
+
+    vfs_init(mbi);
+    vfs_list();
+    print_file_to_serial("config.txt");
+    print_file_to_serial("logo.txt");
 
     gfx_init(framebuffer, fb_width, fb_height);
     serial_write("[OK] GFX double buffer allocated\n");

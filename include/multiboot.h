@@ -34,4 +34,12 @@ struct multiboot_info {
     uint8_t  color_info[6];
 } __attribute__((packed));
 
+// Multiboot module descriptor (one per loaded GRUB "module" line)
+struct multiboot_module {
+    uint32_t mod_start;
+    uint32_t mod_end;
+    uint32_t string;   // physical address of a C string (module cmdline), unused here
+    uint32_t reserved;
+} __attribute__((packed));
+
 #endif
