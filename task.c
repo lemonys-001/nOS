@@ -11,6 +11,7 @@
 // freshly-started task silently running forever with interrupts disabled.
 
 #include <stddef.h>
+#include <stdint.h>
 #include "task.h"
 #include "heap.h"
 #include "serial.h"
