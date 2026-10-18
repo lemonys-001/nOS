@@ -1,6 +1,7 @@
 // font.c - Minimal 5x7 bitmap font (space, '-', ':', '.', 0-9, A-Z)
 // Each glyph is 7 bytes; each byte's low 5 bits are pixels, MSB-first = leftmost.
 
+#include <stddef.h>
 #include "font.h"
 
 static const uint8_t GLYPH_SPACE[7] = {0x00,0x00,0x00,0x00,0x00,0x00,0x00};
