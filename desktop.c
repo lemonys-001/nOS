@@ -1,27 +1,25 @@
 // desktop.c - nOS's window manager and built-in apps.
 //
 // Everything here runs inside a single event loop (called once per frame
-// from compositor_task). There's no per-app process isolation yet -- that
-// would need the apps to be separate ring-3 programs with their own
-// memory, which isn't built yet (see Phase 6b's scope notes). What's here
-// is nonetheless fully interactive and stateful: real keyboard/mouse input
-// drives real application logic, not a static mockup.
+// from compositor_task). There's no per-app process isolation yet.
 //
-// Note on history: an earlier multi-window, draggable-window rewrite of
-// this file caused a startup hang that CI's headless boot-only smoke test
-// didn't catch. That rewrite was reverted. This version adds the nScript
-// console back in isolation, on top of the confirmed-working single fixed
-// window design, specifically to avoid repeating that mistake -- one
-// contained change at a time instead of a large rewrite.
+// Window model: still ONE window at a time (no array, no z-order) -- that
+// was the design that caused a startup hang when attempted as a full
+// multi-window rewrite. This version adds real window chrome (minimize,
+// maximize/restore, close) and corner-handle resizing to that single
+// window, which needed new mutable position/size state and a resize-drag
+// interaction, but deliberately stops short of reintroducing multiple
+// simultaneous windows.
 //
 // Known limitations, stated plainly:
-//  - One fixed-position window at a time (no dragging/multi-window).
-//  - The bitmap font (font.c) only has uppercase glyphs, so typed text
-//    (e.g. in Notepad, or nScript console scrollback) displays in caps.
-//  - Snake uses WASD, not arrow keys: arrow keys are extended (0xE0-
-//    prefixed) PS/2 scancodes that keyboard.c doesn't parse yet.
-//  - The login "password" is a hardcoded literal compared in plaintext;
-//    this is a hobby OS demo, not a security boundary.
+//  - One window at a time; minimizing just hides it (state is kept, not
+//    destroyed) -- reopening the same app from the Start menu restores it.
+//  - The bitmap font is uppercase-only.
+//  - Snake uses WASD, not arrow keys.
+//  - The login "password" is a hardcoded plaintext comparison.
+//  - Resizing changes the window frame and (for Notepad/Console) how much
+//    text is visible, but Snake's grid and Settings' layout stay a fixed
+//    size within it.
 
 #include <stdint.h>
 #include "desktop.h"
@@ -32,10 +30,12 @@
 #include "nscript.h"
 
 #define TASKBAR_HEIGHT 40
-#define WIN_X 200
-#define WIN_Y 120
-#define WIN_W 440
-#define WIN_H 320
+#define DEFAULT_WIN_X 200
+#define DEFAULT_WIN_Y 120
+#define DEFAULT_WIN_W 440
+#define DEFAULT_WIN_H 320
+#define MIN_WIN_W 220
+#define MIN_WIN_H 160
 
 typedef enum { STATE_LOGIN, STATE_DESKTOP } app_state_t;
 typedef enum { APP_NONE, APP_NOTEPAD, APP_SNAKE, APP_SETTINGS, APP_CONSOLE } active_app_t;
@@ -45,6 +45,16 @@ static active_app_t active_app = APP_NONE;
 static int start_menu_open = 0;
 static uint8_t prev_mouse_buttons = 0;
 static uint32_t desktop_bg_color = 0x00A2ED;
+
+/* ---------- window geometry + chrome state ---------- */
+
+static int win_x, win_y, win_w, win_h;
+static int win_minimized = 0;
+static int win_maximized = 0;
+static int saved_x, saved_y, saved_w, saved_h; // restored from when maximizing
+
+static int resizing = 0;
+static int resize_start_mx, resize_start_my, resize_start_w, resize_start_h;
 
 /* ---------- small helpers ---------- */
 
@@ -163,9 +173,9 @@ static void notepad_handle_key(char c) {
     }
 }
 
-static void notepad_render(int wx, int wy) {
+static void notepad_render(int wx, int wy, int wh) {
     gfx_draw_string(wx + 12, wy + 32, "TYPE TO EDIT - CAPS ONLY FONT", 0x888888);
-    int end_y = render_text_lines(wx + 12, wy + 50, wy + WIN_H - 20, notepad_buf, notepad_len, 0x000000);
+    int end_y = render_text_lines(wx + 12, wy + 50, wy + wh - 20, notepad_buf, notepad_len, 0x000000);
     gfx_fill_rect(wx + 12, end_y, 6, 9, 0x000000);
 }
 
@@ -309,7 +319,7 @@ static void settings_render(int wx, int wy, int mx, int my, int clicked) {
     }
 
     gfx_draw_string(wx + 12, wy + 100, "NOS - A WINDOWS 7 STYLE HOBBY OS", 0x333333);
-    gfx_draw_string(wx + 12, wy + 112, "LOGIN NOTEPAD SNAKE SETTINGS CONSOLE", 0x333333);
+    gfx_draw_string(wx + 12, wy + 112, "DRAG THE CORNER TO RESIZE THIS WINDOW", 0x333333);
 }
 
 /* ---------- nScript console ---------- */
@@ -339,14 +349,13 @@ static void console_setbg_cb(int idx) {
     if (idx >= 0 && idx < 5) desktop_bg_color = swatches[idx].color;
 }
 
-// Single-window model: "launching" an app just switches the one visible
-// window's content, same as clicking a Start menu item.
 static void console_launch_cb(const char *name) {
     if (str_eq(name, "notepad")) active_app = APP_NOTEPAD;
     else if (str_eq(name, "snake")) { active_app = APP_SNAKE; snake_reset(); }
     else if (str_eq(name, "settings")) active_app = APP_SETTINGS;
     else if (str_eq(name, "console")) active_app = APP_CONSOLE;
-    else console_append_output("UNKNOWN APP");
+    else { console_append_output("UNKNOWN APP"); return; }
+    win_minimized = 0;
 }
 
 static void console_handle_key(char c) {
@@ -368,18 +377,18 @@ static void console_handle_key(char c) {
     }
 }
 
-static void console_render(int wx, int wy) {
+static void console_render(int wx, int wy, int wh) {
     gfx_draw_string(wx + 12, wy + 32, "NSCRIPT - TRY: x=5;print(x*2)", 0x888888);
 
-    gfx_fill_rect(wx + 10, wy + 44, WIN_W - 20, WIN_H - 80, 0x101010);
-    render_text_lines(wx + 14, wy + 48, wy + WIN_H - 34, console_scrollback, console_scrollback_len, 0x33FF33);
+    gfx_fill_rect(wx + 10, wy + 44, win_w - 20, wh - 80, 0x101010);
+    render_text_lines(wx + 14, wy + 48, wy + wh - 34, console_scrollback, console_scrollback_len, 0x33FF33);
 
-    gfx_fill_rect(wx + 10, wy + WIN_H - 28, WIN_W - 20, 18, 0xFFFFFF);
+    gfx_fill_rect(wx + 10, wy + wh - 28, win_w - 20, 18, 0xFFFFFF);
     char input_display[70] = "> ";
     int k = 2;
     for (int i = 0; i < console_input_len && k < 69; i++) input_display[k++] = console_input[i];
     input_display[k] = '\0';
-    gfx_draw_string(wx + 14, wy + WIN_H - 24, input_display, 0x000000);
+    gfx_draw_string(wx + 14, wy + wh - 24, input_display, 0x000000);
 }
 
 /* ---------- top-level desktop/window manager ---------- */
@@ -394,6 +403,14 @@ void desktop_init(void) {
     console_scrollback_len = 0;
     console_input_len = 0;
 
+    win_x = DEFAULT_WIN_X;
+    win_y = DEFAULT_WIN_Y;
+    win_w = DEFAULT_WIN_W;
+    win_h = DEFAULT_WIN_H;
+    win_minimized = 0;
+    win_maximized = 0;
+    resizing = 0;
+
     nscript_init(console_print_cb, console_setbg_cb, console_launch_cb);
 }
 
@@ -402,11 +419,11 @@ void desktop_update_and_render(void) {
     while ((c = keyboard_getchar()) != 0) {
         if (app_state == STATE_LOGIN) {
             login_handle_key(c);
-        } else if (active_app == APP_NOTEPAD) {
+        } else if (!win_minimized && active_app == APP_NOTEPAD) {
             notepad_handle_key(c);
-        } else if (active_app == APP_SNAKE) {
+        } else if (!win_minimized && active_app == APP_SNAKE) {
             snake_handle_key(c);
-        } else if (active_app == APP_CONSOLE) {
+        } else if (!win_minimized && active_app == APP_CONSOLE) {
             console_handle_key(c);
         }
     }
@@ -414,7 +431,9 @@ void desktop_update_and_render(void) {
     int mx = mouse_get_x();
     int my = mouse_get_y();
     uint8_t buttons = mouse_get_buttons();
-    int clicked = (buttons & 1) && !(prev_mouse_buttons & 1);
+    int held = (buttons & 1) != 0;
+    int clicked = held && !(prev_mouse_buttons & 1);
+    int released = !held && (prev_mouse_buttons & 1);
     prev_mouse_buttons = buttons;
 
     if (app_state == STATE_LOGIN) {
@@ -423,37 +442,100 @@ void desktop_update_and_render(void) {
         return;
     }
 
-    if (active_app == APP_SNAKE) {
+    if (!win_minimized && active_app == APP_SNAKE) {
         snake_update();
     }
 
     gfx_clear(desktop_bg_color);
 
-    if (active_app != APP_NONE) {
-        gfx_fill_rect(WIN_X, WIN_Y, WIN_W, WIN_H, 0xF0F0F0);
-        gfx_fill_rect(WIN_X, WIN_Y, WIN_W, 24, 0x0057B8);
+    if (resizing) {
+        if (held) {
+            int dw = mx - resize_start_mx;
+            int dh = my - resize_start_my;
+            int new_w = resize_start_w + dw;
+            int new_h = resize_start_h + dh;
+
+            int max_w = (int)gfx_width() - win_x - 10;
+            int max_h = (int)gfx_height() - TASKBAR_HEIGHT - win_y - 10;
+
+            if (new_w < MIN_WIN_W) new_w = MIN_WIN_W;
+            if (new_h < MIN_WIN_H) new_h = MIN_WIN_H;
+            if (new_w > max_w) new_w = max_w;
+            if (new_h > max_h) new_h = max_h;
+
+            win_w = new_w;
+            win_h = new_h;
+        }
+        if (released) resizing = 0;
+    }
+
+    if (active_app != APP_NONE && !win_minimized) {
+        gfx_fill_rect(win_x, win_y, win_w, win_h, 0xF0F0F0);
+        gfx_fill_rect(win_x, win_y, win_w, 24, 0x0057B8);
 
         const char *title = "WINDOW";
         if (active_app == APP_NOTEPAD) title = "NOTEPAD";
         else if (active_app == APP_SNAKE) title = "SNAKE";
         else if (active_app == APP_SETTINGS) title = "SETTINGS";
         else if (active_app == APP_CONSOLE) title = "NSCRIPT CONSOLE";
-        gfx_draw_string(WIN_X + 8, WIN_Y + 8, title, 0xFFFFFF);
+        gfx_draw_string(win_x + 8, win_y + 8, title, 0xFFFFFF);
 
-        gfx_fill_rect(WIN_X + WIN_W - 24, WIN_Y, 24, 24, 0xE81123);
-        gfx_draw_string(WIN_X + WIN_W - 18, WIN_Y + 8, "X", 0xFFFFFF);
-        if (clicked && point_in_rect(mx, my, WIN_X + WIN_W - 24, WIN_Y, 24, 24)) {
-            active_app = APP_NONE;
+        int btn_close_x = win_x + win_w - 24;
+        int btn_max_x   = win_x + win_w - 48;
+        int btn_min_x   = win_x + win_w - 72;
+
+        gfx_fill_rect(btn_close_x, win_y, 24, 24, 0xE81123);
+        gfx_draw_string(btn_close_x + 6, win_y + 8, "X", 0xFFFFFF);
+
+        gfx_fill_rect(btn_max_x, win_y, 24, 24, 0x3D7D46);
+        gfx_draw_string(btn_max_x + 6, win_y + 8, "O", 0xFFFFFF);
+
+        gfx_fill_rect(btn_min_x, win_y, 24, 24, 0x555555);
+        gfx_draw_string(btn_min_x + 6, win_y + 8, "-", 0xFFFFFF);
+
+        if (clicked) {
+            if (point_in_rect(mx, my, btn_close_x, win_y, 24, 24)) {
+                active_app = APP_NONE;
+                win_maximized = 0;
+            } else if (point_in_rect(mx, my, btn_max_x, win_y, 24, 24)) {
+                if (!win_maximized) {
+                    saved_x = win_x; saved_y = win_y; saved_w = win_w; saved_h = win_h;
+                    win_x = 10; win_y = 10;
+                    win_w = (int)gfx_width() - 20;
+                    win_h = (int)gfx_height() - TASKBAR_HEIGHT - 20;
+                    win_maximized = 1;
+                } else {
+                    win_x = saved_x; win_y = saved_y; win_w = saved_w; win_h = saved_h;
+                    win_maximized = 0;
+                }
+            } else if (point_in_rect(mx, my, btn_min_x, win_y, 24, 24)) {
+                win_minimized = 1;
+            }
         }
 
+        // Resize grip, bottom-right corner, only when not maximized
+        if (!win_maximized) {
+            int gx = win_x + win_w - 14, gy = win_y + win_h - 14;
+            gfx_fill_rect(gx, gy, 14, 14, 0x888888);
+            if (clicked && point_in_rect(mx, my, gx, gy, 14, 14)) {
+                resizing = 1;
+                resize_start_mx = mx;
+                resize_start_my = my;
+                resize_start_w = win_w;
+                resize_start_h = win_h;
+            }
+        }
+
+        int content_clicked = clicked && !resizing;
+
         if (active_app == APP_NOTEPAD) {
-            notepad_render(WIN_X, WIN_Y);
+            notepad_render(win_x, win_y, win_h);
         } else if (active_app == APP_SNAKE) {
-            snake_render(WIN_X + 20, WIN_Y + 50);
+            snake_render(win_x + 20, win_y + 50);
         } else if (active_app == APP_SETTINGS) {
-            settings_render(WIN_X, WIN_Y, mx, my, clicked);
+            settings_render(win_x, win_y, mx, my, content_clicked);
         } else if (active_app == APP_CONSOLE) {
-            console_render(WIN_X, WIN_Y);
+            console_render(win_x, win_y, win_h);
         }
     }
 
@@ -464,6 +546,14 @@ void desktop_update_and_render(void) {
     gfx_fill_rect(0, bar_y, (int)w, TASKBAR_HEIGHT, 0x1F1F1F);
     gfx_fill_rect(4, bar_y + 4, 90, TASKBAR_HEIGHT - 8, 0x2D7D46);
     gfx_draw_string(16, bar_y + 14, "START", 0xFFFFFF);
+
+    if (active_app != APP_NONE && win_minimized) {
+        gfx_fill_rect(100, bar_y + 4, 110, TASKBAR_HEIGHT - 8, 0x3D3D3D);
+        gfx_draw_string(108, bar_y + 14, "MINIMIZED", 0xFFFFFF);
+        if (clicked && point_in_rect(mx, my, 100, bar_y + 4, 110, TASKBAR_HEIGHT - 8)) {
+            win_minimized = 0;
+        }
+    }
 
     if (clicked && point_in_rect(mx, my, 4, bar_y + 4, 90, TASKBAR_HEIGHT - 8)) {
         start_menu_open = !start_menu_open;
@@ -485,6 +575,7 @@ void desktop_update_and_render(void) {
 
             if (clicked && hover) {
                 active_app = apps[i];
+                win_minimized = 0;
                 start_menu_open = 0;
                 if (active_app == APP_SNAKE) snake_reset();
             }

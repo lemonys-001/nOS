@@ -5,10 +5,11 @@ A 32-bit graphical operating system built from scratch, mimicking the aesthetic 
 ## Status note
 
 An earlier multi-window GUI rewrite caused a startup hang (CI's headless
-boot-only smoke test doesn't catch interactive bugs, so it slipped through).
-It was reverted. The nScript console has since been re-added on top of the
-confirmed-working single-window desktop, as an isolated, contained change,
-to avoid repeating that mistake.
+boot-only smoke test doesn't catch interactive bugs). It was reverted.
+Features are now added incrementally and in isolation: the nScript console
+was re-added on its own, and this round adds real window chrome
+(minimize/maximize/close) and resizing to the same confirmed-working
+single-window design, without reintroducing multiple simultaneous windows.
 
 ## Roadmap
 
@@ -20,42 +21,35 @@ to avoid repeating that mistake.
 - Phase 6a: Preemptive kernel task scheduler (PIT, context switching) ✅
 - Phase 6b: Ring 3, TSS, syscalls, flat-binary user program ✅
 - Phase 7: Userland Apps (login, notepad, snake, settings) ✅
-- **nScript console, added in isolation on the stable single-window desktop** ✅ Current
-- Multi-window GUI, File Manager — shelved for now; a future attempt should be split into smaller, independently-verifiable commits rather than one large rewrite
+- nScript console, added in isolation on the stable single-window desktop ✅
+- **Window chrome (minimize/maximize/close) + resizing, single window** ✅ Current
+- Planned, in isolated steps: writable file manager (create/edit scripts), ATA disk driver + HDD install (self-tested write/readback, boot success unverified by me)
+- Multiple simultaneous windows — deliberately deferred pending more cautious design
+
+## Window chrome + resizing
+
+The single window now has real title bar controls:
+- **-** minimize — hides the window; a "MINIMIZED" indicator appears in the taskbar, click it (or reopen the app from Start) to restore.
+- **O** maximize/restore — toggles between the normal size and a near-fullscreen size (small margin above the taskbar); remembers the pre-maximize position/size.
+- **X** close — unchanged from before.
+- **Resize grip** (bottom-right corner) — drag to resize the window (clamped to a sane minimum and to the screen bounds); disabled while maximized.
+
+This deliberately stays within the single-window model (no window array, no z-order, no reordering) that's been stable since the Phase 8 revert — only the one window's position/size became mutable, plus one new resize-drag interaction. Snake's grid and Settings' layout don't reflow with the window size; Notepad and the Console do (their text area's visible height follows the window height).
 
 ## Apps
 
-- **Login screen** — real text input with backspace and a masked password field; typing `nos` + Enter unlocks the desktop.
-- **Notepad** — a real 1KB text buffer driven by actual keystrokes.
-- **Snake** — WASD-controlled grid movement, wall/self collision, food via an xorshift PRNG, growing body, live score, game-over/restart (`R`), paced by `pit_get_ticks()`.
-- **Settings** — click a color swatch to change the live desktop background color.
-- **nScript Console** (`nscript.c`/`.h`) — a small original Lua-inspired interpreter, **not** a port of real Lua (which needs `setjmp`/`longjmp`, floating point, and libc formatting this freestanding kernel doesn't have). Supports integer variables (`a`-`z`), `+ - * / %`, comparisons, `if/then/else/end`, `while/do/end` (capped at 100,000 iterations so a runaway script can't hang the desktop), `print(expr|"string")`, and two OS-control builtins: `setbg(n)` and `launch("appname")`. Statements on one line are separated by `;` (REPL-style). Try:
-  ```
-  > x=5;print(x*2)
-  10
-  > i=0;while i<3 do print(i);i=i+1 end
-  0
-  1
-  2
-  > setbg(2)
-  > launch("snake")
-  ```
-
-All apps share one fixed-position window (no dragging/multi-window yet) with a real taskbar + Start menu (click Start, click an app name to open it, click the red X to close it).
-
-**Known limitations, stated plainly:**
-- One window at a time, no dragging (the multi-window version that attempted this caused a hang and was reverted).
-- The bitmap font (`font.c`) is uppercase-only, so typed text always displays in caps.
-- Snake uses WASD, not arrow keys (unparsed extended PS/2 scancodes).
-- The login password is a hardcoded plaintext comparison (`nos`), not a security boundary.
-- nScript's correctness was verified by careful manual tracing, not automated testing — CI only confirms the OS boots, it can't type into the console for us.
+- **Login screen** — real text input, masked password field, `nos` + Enter to unlock.
+- **Notepad** — real 1KB text buffer, live keystrokes.
+- **Snake** — WASD grid movement, collisions, food, score, game-over/restart, PIT-paced.
+- **Settings** — click a swatch to change the live desktop background color.
+- **nScript Console** — a small original Lua-inspired interpreter (not real Lua — see `nscript.c` for why). Variables, `if/while`, `print()`, `setbg()`, `launch()`.
 
 ### Try it
 
 ```bash
 make run
 ```
-Log in with `nos`, click **START**, open **CONSOLE**, try the script above.
+Log in with `nos`, open any app, then try the minimize/maximize/close buttons and drag the bottom-right corner to resize.
 
 ## Earlier phases
 
@@ -84,7 +78,7 @@ heap.c                     Kernel heap (kmalloc/kfree)
 gfx.c                      Double-buffered drawing primitives
 font.c                     5x7 bitmap font (uppercase only)
 compositor.c               Task-loop wrapper around the window manager
-desktop.c                  Window manager + Login/Notepad/Snake/Settings/Console apps
+desktop.c                  Window manager (chrome, resize) + Login/Notepad/Snake/Settings/Console apps
 nscript.c                  Small original Lua-inspired scripting interpreter
 vfs.c                      initrd parser / file reader
 pit.c                      PIT timer driver (IRQ0) + tick counter
@@ -107,13 +101,13 @@ Makefile                   Build system (nasm + gcc -m32 + ld + grub-mkrescue + 
 sudo apt-get install build-essential gcc-multilib nasm xorriso grub-pc-bin qemu-system-x86 python3
 
 make
-make run           # login screen -> desktop with Notepad/Snake/Settings/Console
+make run           # login screen -> desktop with resizable/minimizable/maximizable windows
 make run-serial     # also streams PMM/heap/VFS/task/syscall debug logs
 ```
 
 ## CI
 
-Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts. This only verifies the OS *boots* -- it cannot interact with the desktop, which is why GUI/script changes are kept small and isolated rather than bundled into large rewrites.
+Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts. This only verifies the OS *boots* -- it cannot interact with the desktop, which is why GUI changes are kept small and isolated rather than bundled into large rewrites.
 
 ## License
 
