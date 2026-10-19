@@ -1,25 +1,28 @@
 // desktop.c - nOS's window manager and built-in apps.
 //
 // Everything here runs inside a single event loop (called once per frame
-// from compositor_task). There's no per-app process isolation yet.
+// from compositor_task). There's no per-app process isolation yet -- that
+// would need the apps to be separate ring-3 programs with their own
+// memory, which isn't built yet (see Phase 6b's scope notes). What's here
+// is nonetheless fully interactive and stateful: real keyboard/mouse input
+// drives real application logic, not a static mockup.
 //
-// Window model: still ONE window at a time (no array, no z-order).
-//
-// This revision adds a File Manager (APP_FILES) backed by a new writable
-// in-memory file store (ramfs.c), alongside the existing read-only initrd
-// VFS. Since there's no on-OS compiler, "making apps" here means creating
-// and editing small nScript (.ns) text scripts -- run them from the
-// Console by typing their content, or (documented limitation) copy the
-// saved script's content into the Console by hand for now; there's no
-// "run this file" button yet, kept out to limit this change's scope.
+// Note on history: an earlier multi-window, draggable-window rewrite of
+// this file caused a startup hang that CI's headless boot-only smoke test
+// didn't catch. That rewrite was reverted. A later attempt to add window
+// chrome (minimize/maximize/resize) and then a File Manager also broke
+// the running OS (even though both changes passed CI, which only confirms
+// the kernel boots, not that the GUI renders/behaves correctly) and were
+// reverted too. This is the last version confirmed working interactively.
 //
 // Known limitations, stated plainly:
-//  - One window at a time; minimizing hides it, reopening restores it.
-//  - ramfs is RAM-only and does not persist across reboots (no disk I/O
-//    yet -- that's planned separately, see README).
-//  - The bitmap font is uppercase-only.
-//  - Snake uses WASD, not arrow keys.
-//  - The login "password" is a hardcoded plaintext comparison.
+//  - One fixed-position window at a time (no dragging/multi-window).
+//  - The bitmap font (font.c) only has uppercase glyphs, so typed text
+//    (e.g. in Notepad, or nScript console scrollback) displays in caps.
+//  - Snake uses WASD, not arrow keys: arrow keys are extended (0xE0-
+//    prefixed) PS/2 scancodes that keyboard.c doesn't parse yet.
+//  - The login "password" is a hardcoded literal compared in plaintext;
+//    this is a hobby OS demo, not a security boundary.
 
 #include <stdint.h>
 #include "desktop.h"
@@ -28,34 +31,21 @@
 #include "mouse.h"
 #include "pit.h"
 #include "nscript.h"
-#include "ramfs.h"
 
 #define TASKBAR_HEIGHT 40
-#define DEFAULT_WIN_X 200
-#define DEFAULT_WIN_Y 120
-#define DEFAULT_WIN_W 440
-#define DEFAULT_WIN_H 320
-#define MIN_WIN_W 220
-#define MIN_WIN_H 160
+#define WIN_X 200
+#define WIN_Y 120
+#define WIN_W 440
+#define WIN_H 320
 
 typedef enum { STATE_LOGIN, STATE_DESKTOP } app_state_t;
-typedef enum { APP_NONE, APP_NOTEPAD, APP_SNAKE, APP_SETTINGS, APP_CONSOLE, APP_FILES } active_app_t;
+typedef enum { APP_NONE, APP_NOTEPAD, APP_SNAKE, APP_SETTINGS, APP_CONSOLE } active_app_t;
 
 static app_state_t app_state = STATE_LOGIN;
 static active_app_t active_app = APP_NONE;
 static int start_menu_open = 0;
 static uint8_t prev_mouse_buttons = 0;
 static uint32_t desktop_bg_color = 0x00A2ED;
-
-/* ---------- window geometry + chrome state ---------- */
-
-static int win_x, win_y, win_w, win_h;
-static int win_minimized = 0;
-static int win_maximized = 0;
-static int saved_x, saved_y, saved_w, saved_h;
-
-static int resizing = 0;
-static int resize_start_mx, resize_start_my, resize_start_w, resize_start_h;
 
 /* ---------- small helpers ---------- */
 
@@ -85,6 +75,8 @@ static void draw_cursor(int mx, int my) {
     gfx_fill_rect(mx + 1, my + 1, 11, 1, 0x000000);
 }
 
+// Shared renderer for newline-delimited text blocks (Notepad, Console
+// scrollback). Returns the y-coordinate right after the last drawn line.
 static int render_text_lines(int x, int y, int max_y, const char *buf, int len, uint32_t color) {
     int line_y = y;
     int line_start = 0;
@@ -172,9 +164,9 @@ static void notepad_handle_key(char c) {
     }
 }
 
-static void notepad_render(int wx, int wy, int wh) {
+static void notepad_render(int wx, int wy) {
     gfx_draw_string(wx + 12, wy + 32, "TYPE TO EDIT - CAPS ONLY FONT", 0x888888);
-    int end_y = render_text_lines(wx + 12, wy + 50, wy + wh - 20, notepad_buf, notepad_len, 0x000000);
+    int end_y = render_text_lines(wx + 12, wy + 50, wy + WIN_H - 20, notepad_buf, notepad_len, 0x000000);
     gfx_fill_rect(wx + 12, end_y, 6, 9, 0x000000);
 }
 
@@ -294,7 +286,11 @@ static void snake_render(int wx, int wy) {
 
 typedef struct { uint32_t color; } swatch_t;
 static const swatch_t swatches[5] = {
-    { 0x00A2ED }, { 0x2D7D46 }, { 0x8E24AA }, { 0xE81123 }, { 0x1F1F1F },
+    { 0x00A2ED }, // windows 7 blue
+    { 0x2D7D46 }, // green
+    { 0x8E24AA }, // purple
+    { 0xE81123 }, // red
+    { 0x1F1F1F }, // dark
 };
 
 static void settings_render(int wx, int wy, int mx, int my, int clicked) {
@@ -314,7 +310,7 @@ static void settings_render(int wx, int wy, int mx, int my, int clicked) {
     }
 
     gfx_draw_string(wx + 12, wy + 100, "NOS - A WINDOWS 7 STYLE HOBBY OS", 0x333333);
-    gfx_draw_string(wx + 12, wy + 112, "DRAG THE CORNER TO RESIZE THIS WINDOW", 0x333333);
+    gfx_draw_string(wx + 12, wy + 112, "LOGIN NOTEPAD SNAKE SETTINGS CONSOLE", 0x333333);
 }
 
 /* ---------- nScript console ---------- */
@@ -330,23 +326,28 @@ static void console_append_output(const char *text) {
     while (text[tlen]) tlen++;
 
     if (console_scrollback_len + tlen + 1 >= CONSOLE_SCROLLBACK_SIZE) {
-        console_scrollback_len = 0;
+        console_scrollback_len = 0; // simple overflow policy: wipe and continue
     }
     for (int i = 0; i < tlen; i++) console_scrollback[console_scrollback_len++] = text[i];
     console_scrollback[console_scrollback_len++] = '\n';
 }
 
-static void console_print_cb(const char *text) { console_append_output(text); }
-static void console_setbg_cb(int idx) { if (idx >= 0 && idx < 5) desktop_bg_color = swatches[idx].color; }
+static void console_print_cb(const char *text) {
+    console_append_output(text);
+}
 
+static void console_setbg_cb(int idx) {
+    if (idx >= 0 && idx < 5) desktop_bg_color = swatches[idx].color;
+}
+
+// Single-window model: "launching" an app just switches the one visible
+// window's content, same as clicking a Start menu item.
 static void console_launch_cb(const char *name) {
     if (str_eq(name, "notepad")) active_app = APP_NOTEPAD;
     else if (str_eq(name, "snake")) { active_app = APP_SNAKE; snake_reset(); }
     else if (str_eq(name, "settings")) active_app = APP_SETTINGS;
     else if (str_eq(name, "console")) active_app = APP_CONSOLE;
-    else if (str_eq(name, "files")) active_app = APP_FILES;
-    else { console_append_output("UNKNOWN APP"); return; }
-    win_minimized = 0;
+    else console_append_output("UNKNOWN APP");
 }
 
 static void console_handle_key(char c) {
@@ -368,130 +369,18 @@ static void console_handle_key(char c) {
     }
 }
 
-static void console_render(int wx, int wy, int wh) {
+static void console_render(int wx, int wy) {
     gfx_draw_string(wx + 12, wy + 32, "NSCRIPT - TRY: x=5;print(x*2)", 0x888888);
 
-    gfx_fill_rect(wx + 10, wy + 44, win_w - 20, wh - 80, 0x101010);
-    render_text_lines(wx + 14, wy + 48, wy + wh - 34, console_scrollback, console_scrollback_len, 0x33FF33);
+    gfx_fill_rect(wx + 10, wy + 44, WIN_W - 20, WIN_H - 80, 0x101010);
+    render_text_lines(wx + 14, wy + 48, wy + WIN_H - 34, console_scrollback, console_scrollback_len, 0x33FF33);
 
-    gfx_fill_rect(wx + 10, wy + wh - 28, win_w - 20, 18, 0xFFFFFF);
+    gfx_fill_rect(wx + 10, wy + WIN_H - 28, WIN_W - 20, 18, 0xFFFFFF);
     char input_display[70] = "> ";
     int k = 2;
     for (int i = 0; i < console_input_len && k < 69; i++) input_display[k++] = console_input[i];
     input_display[k] = '\0';
-    gfx_draw_string(wx + 14, wy + wh - 24, input_display, 0x000000);
-}
-
-/* ---------- file manager ---------- */
-
-typedef enum { FM_LIST, FM_NAMING, FM_EDITING } fm_mode_t;
-static fm_mode_t fm_mode = FM_LIST;
-static char fm_name_buf[32];
-static int fm_name_len = 0;
-static char fm_edit_buf[RAMFS_MAX_SIZE];
-static int fm_edit_len = 0;
-static char fm_current_file[32];
-static int fm_has_current = 0;
-
-static void files_handle_key(char c) {
-    if (fm_mode == FM_NAMING) {
-        if (c == '\n') {
-            if (fm_name_len > 0) {
-                fm_name_buf[fm_name_len] = '\0';
-                if (ramfs_create(fm_name_buf)) {
-                    int i = 0;
-                    while (fm_name_buf[i] && i < 31) { fm_current_file[i] = fm_name_buf[i]; i++; }
-                    fm_current_file[i] = '\0';
-                    fm_has_current = 1;
-                    fm_edit_len = 0;
-                    fm_mode = FM_EDITING;
-                } else {
-                    fm_mode = FM_LIST; // name taken or table full; bail back to the list
-                }
-            } else {
-                fm_mode = FM_LIST;
-            }
-        } else if (c == '\b') {
-            if (fm_name_len > 0) fm_name_len--;
-        } else if (c >= 32 && c < 127 && fm_name_len < 31) {
-            fm_name_buf[fm_name_len++] = c;
-        }
-        return;
-    }
-
-    if (fm_mode == FM_EDITING) {
-        if (c == '\b') {
-            if (fm_edit_len > 0) fm_edit_len--;
-        } else if (c == '\n') {
-            if (fm_edit_len < RAMFS_MAX_SIZE - 1) fm_edit_buf[fm_edit_len++] = '\n';
-        } else if (c >= 32 && c < 127) {
-            if (fm_edit_len < RAMFS_MAX_SIZE - 1) fm_edit_buf[fm_edit_len++] = c;
-        }
-        return;
-    }
-}
-
-static void files_render(int wx, int wy, int wh, int mx, int my, int clicked) {
-    if (fm_mode == FM_LIST) {
-        gfx_draw_string(wx + 12, wy + 30, "FILES (CLICK TO EDIT):", 0x333333);
-
-        uint32_t count = ramfs_file_count();
-        int row_y = wy + 46;
-        for (uint32_t i = 0; i < count && row_y < wy + wh - 40; i++) {
-            const char *name = ramfs_file_name(i);
-            gfx_fill_rect(wx + 12, row_y, win_w - 24, 16, 0xFFFFFF);
-            gfx_draw_string(wx + 16, row_y + 4, name, 0x000000);
-
-            if (clicked && point_in_rect(mx, my, wx + 12, row_y, win_w - 24, 16)) {
-                uint32_t len = 0;
-                const char *data = ramfs_read(name, &len);
-                if (data) {
-                    if (len > RAMFS_MAX_SIZE - 1) len = RAMFS_MAX_SIZE - 1;
-                    for (uint32_t k = 0; k < len; k++) fm_edit_buf[k] = data[k];
-                    fm_edit_len = (int)len;
-                    int j = 0;
-                    while (name[j] && j < 31) { fm_current_file[j] = name[j]; j++; }
-                    fm_current_file[j] = '\0';
-                    fm_has_current = 1;
-                    fm_mode = FM_EDITING;
-                }
-            }
-            row_y += 18;
-        }
-
-        int new_btn_y = wy + wh - 32;
-        gfx_fill_rect(wx + 12, new_btn_y, 100, 22, 0x2D7D46);
-        gfx_draw_string(wx + 20, new_btn_y + 6, "NEW FILE", 0xFFFFFF);
-        if (clicked && point_in_rect(mx, my, wx + 12, new_btn_y, 100, 22)) {
-            fm_name_len = 0;
-            fm_mode = FM_NAMING;
-        }
-    } else if (fm_mode == FM_NAMING) {
-        gfx_draw_string(wx + 12, wy + 40, "NAME THE NEW FILE, THEN PRESS ENTER:", 0x333333);
-        gfx_fill_rect(wx + 12, wy + 56, win_w - 24, 18, 0xFFFFFF);
-        char buf[33];
-        int i; for (i = 0; i < fm_name_len; i++) buf[i] = fm_name_buf[i]; buf[i] = '\0';
-        gfx_draw_string(wx + 16, wy + 60, buf, 0x000000);
-    } else { // FM_EDITING
-        gfx_draw_string(wx + 12, wy + 30, fm_has_current ? fm_current_file : "UNTITLED", 0x333333);
-
-        int save_btn_x = wx + win_w - 160, close_btn_x = wx + win_w - 90;
-        gfx_fill_rect(save_btn_x, wy + 26, 60, 20, 0x0057B8);
-        gfx_draw_string(save_btn_x + 6, wy + 31, "SAVE", 0xFFFFFF);
-        gfx_fill_rect(close_btn_x, wy + 26, 70, 20, 0x555555);
-        gfx_draw_string(close_btn_x + 4, wy + 31, "DONE", 0xFFFFFF);
-
-        if (clicked) {
-            if (point_in_rect(mx, my, save_btn_x, wy + 26, 60, 20) && fm_has_current) {
-                ramfs_write(fm_current_file, fm_edit_buf, (uint32_t)fm_edit_len);
-            } else if (point_in_rect(mx, my, close_btn_x, wy + 26, 70, 20)) {
-                fm_mode = FM_LIST;
-            }
-        }
-
-        int end_y = render_text_lines(wx + 12, wy + 54, wy + wh - 20, fm_edit_buf, fm_edit_len, 0x000000);
-        gfx_fill_rect(wx + 12, end_y, 6, 9, 0x000000);
-    }
+    gfx_draw_string(wx + 14, wy + WIN_H - 24, input_display, 0x000000);
 }
 
 /* ---------- top-level desktop/window manager ---------- */
@@ -505,19 +394,7 @@ void desktop_init(void) {
     notepad_len = 0;
     console_scrollback_len = 0;
     console_input_len = 0;
-    fm_mode = FM_LIST;
-    fm_name_len = 0;
-    fm_has_current = 0;
 
-    win_x = DEFAULT_WIN_X;
-    win_y = DEFAULT_WIN_Y;
-    win_w = DEFAULT_WIN_W;
-    win_h = DEFAULT_WIN_H;
-    win_minimized = 0;
-    win_maximized = 0;
-    resizing = 0;
-
-    ramfs_init();
     nscript_init(console_print_cb, console_setbg_cb, console_launch_cb);
 }
 
@@ -526,23 +403,19 @@ void desktop_update_and_render(void) {
     while ((c = keyboard_getchar()) != 0) {
         if (app_state == STATE_LOGIN) {
             login_handle_key(c);
-        } else if (!win_minimized && active_app == APP_NOTEPAD) {
+        } else if (active_app == APP_NOTEPAD) {
             notepad_handle_key(c);
-        } else if (!win_minimized && active_app == APP_SNAKE) {
+        } else if (active_app == APP_SNAKE) {
             snake_handle_key(c);
-        } else if (!win_minimized && active_app == APP_CONSOLE) {
+        } else if (active_app == APP_CONSOLE) {
             console_handle_key(c);
-        } else if (!win_minimized && active_app == APP_FILES) {
-            files_handle_key(c);
         }
     }
 
     int mx = mouse_get_x();
     int my = mouse_get_y();
     uint8_t buttons = mouse_get_buttons();
-    int held = (buttons & 1) != 0;
-    int clicked = held && !(prev_mouse_buttons & 1);
-    int released = !held && (prev_mouse_buttons & 1);
+    int clicked = (buttons & 1) && !(prev_mouse_buttons & 1);
     prev_mouse_buttons = buttons;
 
     if (app_state == STATE_LOGIN) {
@@ -551,102 +424,37 @@ void desktop_update_and_render(void) {
         return;
     }
 
-    if (!win_minimized && active_app == APP_SNAKE) {
+    if (active_app == APP_SNAKE) {
         snake_update();
     }
 
     gfx_clear(desktop_bg_color);
 
-    if (resizing) {
-        if (held) {
-            int dw = mx - resize_start_mx;
-            int dh = my - resize_start_my;
-            int new_w = resize_start_w + dw;
-            int new_h = resize_start_h + dh;
-
-            int max_w = (int)gfx_width() - win_x - 10;
-            int max_h = (int)gfx_height() - TASKBAR_HEIGHT - win_y - 10;
-
-            if (new_w < MIN_WIN_W) new_w = MIN_WIN_W;
-            if (new_h < MIN_WIN_H) new_h = MIN_WIN_H;
-            if (new_w > max_w) new_w = max_w;
-            if (new_h > max_h) new_h = max_h;
-
-            win_w = new_w;
-            win_h = new_h;
-        }
-        if (released) resizing = 0;
-    }
-
-    if (active_app != APP_NONE && !win_minimized) {
-        gfx_fill_rect(win_x, win_y, win_w, win_h, 0xF0F0F0);
-        gfx_fill_rect(win_x, win_y, win_w, 24, 0x0057B8);
+    if (active_app != APP_NONE) {
+        gfx_fill_rect(WIN_X, WIN_Y, WIN_W, WIN_H, 0xF0F0F0);
+        gfx_fill_rect(WIN_X, WIN_Y, WIN_W, 24, 0x0057B8);
 
         const char *title = "WINDOW";
         if (active_app == APP_NOTEPAD) title = "NOTEPAD";
         else if (active_app == APP_SNAKE) title = "SNAKE";
         else if (active_app == APP_SETTINGS) title = "SETTINGS";
         else if (active_app == APP_CONSOLE) title = "NSCRIPT CONSOLE";
-        else if (active_app == APP_FILES) title = "FILE MANAGER";
-        gfx_draw_string(win_x + 8, win_y + 8, title, 0xFFFFFF);
+        gfx_draw_string(WIN_X + 8, WIN_Y + 8, title, 0xFFFFFF);
 
-        int btn_close_x = win_x + win_w - 24;
-        int btn_max_x   = win_x + win_w - 48;
-        int btn_min_x   = win_x + win_w - 72;
-
-        gfx_fill_rect(btn_close_x, win_y, 24, 24, 0xE81123);
-        gfx_draw_string(btn_close_x + 6, win_y + 8, "X", 0xFFFFFF);
-
-        gfx_fill_rect(btn_max_x, win_y, 24, 24, 0x3D7D46);
-        gfx_draw_string(btn_max_x + 6, win_y + 8, "O", 0xFFFFFF);
-
-        gfx_fill_rect(btn_min_x, win_y, 24, 24, 0x555555);
-        gfx_draw_string(btn_min_x + 6, win_y + 8, "-", 0xFFFFFF);
-
-        if (clicked) {
-            if (point_in_rect(mx, my, btn_close_x, win_y, 24, 24)) {
-                active_app = APP_NONE;
-                win_maximized = 0;
-            } else if (point_in_rect(mx, my, btn_max_x, win_y, 24, 24)) {
-                if (!win_maximized) {
-                    saved_x = win_x; saved_y = win_y; saved_w = win_w; saved_h = win_h;
-                    win_x = 10; win_y = 10;
-                    win_w = (int)gfx_width() - 20;
-                    win_h = (int)gfx_height() - TASKBAR_HEIGHT - 20;
-                    win_maximized = 1;
-                } else {
-                    win_x = saved_x; win_y = saved_y; win_w = saved_w; win_h = saved_h;
-                    win_maximized = 0;
-                }
-            } else if (point_in_rect(mx, my, btn_min_x, win_y, 24, 24)) {
-                win_minimized = 1;
-            }
+        gfx_fill_rect(WIN_X + WIN_W - 24, WIN_Y, 24, 24, 0xE81123);
+        gfx_draw_string(WIN_X + WIN_W - 18, WIN_Y + 8, "X", 0xFFFFFF);
+        if (clicked && point_in_rect(mx, my, WIN_X + WIN_W - 24, WIN_Y, 24, 24)) {
+            active_app = APP_NONE;
         }
-
-        if (!win_maximized) {
-            int gx = win_x + win_w - 14, gy = win_y + win_h - 14;
-            gfx_fill_rect(gx, gy, 14, 14, 0x888888);
-            if (clicked && point_in_rect(mx, my, gx, gy, 14, 14)) {
-                resizing = 1;
-                resize_start_mx = mx;
-                resize_start_my = my;
-                resize_start_w = win_w;
-                resize_start_h = win_h;
-            }
-        }
-
-        int content_clicked = clicked && !resizing;
 
         if (active_app == APP_NOTEPAD) {
-            notepad_render(win_x, win_y, win_h);
+            notepad_render(WIN_X, WIN_Y);
         } else if (active_app == APP_SNAKE) {
-            snake_render(win_x + 20, win_y + 50);
+            snake_render(WIN_X + 20, WIN_Y + 50);
         } else if (active_app == APP_SETTINGS) {
-            settings_render(win_x, win_y, mx, my, content_clicked);
+            settings_render(WIN_X, WIN_Y, mx, my, clicked);
         } else if (active_app == APP_CONSOLE) {
-            console_render(win_x, win_y, win_h);
-        } else if (active_app == APP_FILES) {
-            files_render(win_x, win_y, win_h, mx, my, content_clicked);
+            console_render(WIN_X, WIN_Y);
         }
     }
 
@@ -658,27 +466,19 @@ void desktop_update_and_render(void) {
     gfx_fill_rect(4, bar_y + 4, 90, TASKBAR_HEIGHT - 8, 0x2D7D46);
     gfx_draw_string(16, bar_y + 14, "START", 0xFFFFFF);
 
-    if (active_app != APP_NONE && win_minimized) {
-        gfx_fill_rect(100, bar_y + 4, 110, TASKBAR_HEIGHT - 8, 0x3D3D3D);
-        gfx_draw_string(108, bar_y + 14, "MINIMIZED", 0xFFFFFF);
-        if (clicked && point_in_rect(mx, my, 100, bar_y + 4, 110, TASKBAR_HEIGHT - 8)) {
-            win_minimized = 0;
-        }
-    }
-
     if (clicked && point_in_rect(mx, my, 4, bar_y + 4, 90, TASKBAR_HEIGHT - 8)) {
         start_menu_open = !start_menu_open;
     }
 
     if (start_menu_open) {
-        int mx0 = 4, mw = 150, item_h = 26, mh = item_h * 5;
+        int mx0 = 4, mw = 150, item_h = 26, mh = item_h * 4;
         int my0 = bar_y - mh - 4;
 
         gfx_fill_rect(mx0, my0, mw, mh, 0x2B2B2B);
-        const char *items[5] = { "NOTEPAD", "SNAKE", "SETTINGS", "CONSOLE", "FILES" };
-        active_app_t apps[5] = { APP_NOTEPAD, APP_SNAKE, APP_SETTINGS, APP_CONSOLE, APP_FILES };
+        const char *items[4] = { "NOTEPAD", "SNAKE", "SETTINGS", "CONSOLE" };
+        active_app_t apps[4] = { APP_NOTEPAD, APP_SNAKE, APP_SETTINGS, APP_CONSOLE };
 
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 4; i++) {
             int iy = my0 + i * item_h;
             int hover = point_in_rect(mx, my, mx0, iy, mw, item_h);
             gfx_fill_rect(mx0, iy, mw, item_h, hover ? 0x3D7D46 : 0x2B2B2B);
@@ -686,10 +486,8 @@ void desktop_update_and_render(void) {
 
             if (clicked && hover) {
                 active_app = apps[i];
-                win_minimized = 0;
                 start_menu_open = 0;
                 if (active_app == APP_SNAKE) snake_reset();
-                if (active_app == APP_FILES) fm_mode = FM_LIST;
             }
         }
     }
