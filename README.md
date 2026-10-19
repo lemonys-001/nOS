@@ -4,12 +4,11 @@ A 32-bit graphical operating system built from scratch, mimicking the aesthetic 
 
 ## Status note
 
-Phase 8 (multi-window GUI + nScript interpreter) was reverted after it caused
-a startup hang on real hardware/QEMU testing (stuck on a blank blue screen),
-which CI's headless boot-only smoke test didn't catch. The repo is currently
-back on the last confirmed-working state (Phase 7). Phase 8's source
-(`nscript.c`/`.h`) is still in the repo but unused by the Makefile, kept
-around to debug and reintroduce carefully rather than thrown away.
+An earlier multi-window GUI rewrite caused a startup hang (CI's headless
+boot-only smoke test doesn't catch interactive bugs, so it slipped through).
+It was reverted. The nScript console has since been re-added on top of the
+confirmed-working single-window desktop, as an isolated, contained change,
+to avoid repeating that mistake.
 
 ## Roadmap
 
@@ -20,32 +19,43 @@ around to debug and reintroduce carefully rather than thrown away.
 - Phase 5: Filesystem (initrd VFS) ✅
 - Phase 6a: Preemptive kernel task scheduler (PIT, context switching) ✅
 - Phase 6b: Ring 3, TSS, syscalls, flat-binary user program ✅
-- **Phase 7: Userland Apps (login, notepad, snake, settings)** ✅ Current (stable)
-- Phase 8: Multi-window GUI, File Manager, nScript interpreter ⚠️ Reverted (caused a startup hang) — to be reintroduced after debugging with serial output
+- Phase 7: Userland Apps (login, notepad, snake, settings) ✅
+- **nScript console, added in isolation on the stable single-window desktop** ✅ Current
+- Multi-window GUI, File Manager — shelved for now; a future attempt should be split into smaller, independently-verifiable commits rather than one large rewrite
 
-## Phase 7: Userland Apps
+## Apps
 
-All four apps requested in the original roadmap, fully interactive:
+- **Login screen** — real text input with backspace and a masked password field; typing `nos` + Enter unlocks the desktop.
+- **Notepad** — a real 1KB text buffer driven by actual keystrokes.
+- **Snake** — WASD-controlled grid movement, wall/self collision, food via an xorshift PRNG, growing body, live score, game-over/restart (`R`), paced by `pit_get_ticks()`.
+- **Settings** — click a color swatch to change the live desktop background color.
+- **nScript Console** (`nscript.c`/`.h`) — a small original Lua-inspired interpreter, **not** a port of real Lua (which needs `setjmp`/`longjmp`, floating point, and libc formatting this freestanding kernel doesn't have). Supports integer variables (`a`-`z`), `+ - * / %`, comparisons, `if/then/else/end`, `while/do/end` (capped at 100,000 iterations so a runaway script can't hang the desktop), `print(expr|"string")`, and two OS-control builtins: `setbg(n)` and `launch("appname")`. Statements on one line are separated by `;` (REPL-style). Try:
+  ```
+  > x=5;print(x*2)
+  10
+  > i=0;while i<3 do print(i);i=i+1 end
+  0
+  1
+  2
+  > setbg(2)
+  > launch("snake")
+  ```
 
-- **Login screen** (`desktop.c`) — real text input with backspace and a masked password field; typing `nos` + Enter unlocks the desktop, anything else shows an error and clears the field.
-- **Notepad** — a real text buffer (1KB) driven by actual keystrokes.
-- **Snake** — a real game: WASD-controlled grid movement, wall/self collision detection, food spawning via an xorshift PRNG, a growing body, a live score counter, and a game-over/restart (`R`) state, paced by `pit_get_ticks()`.
-- **Settings** — click a color swatch to change the live desktop background color immediately.
+All apps share one fixed-position window (no dragging/multi-window yet) with a real taskbar + Start menu (click Start, click an app name to open it, click the red X to close it).
 
-A real taskbar + Start menu (click Start, click an app name to launch it, click the red X to close it back to the desktop) with proper click-edge detection.
-
-**Design notes / honest limitations:**
-- One fixed-position window at a time (no dragging/multi-window yet — that was Phase 8, reverted).
-- The bitmap font (`font.c`) only has uppercase glyphs.
-- Snake uses WASD rather than arrow keys (unparsed extended PS/2 scancodes).
-- The login password is a hardcoded plaintext comparison (`nos`).
+**Known limitations, stated plainly:**
+- One window at a time, no dragging (the multi-window version that attempted this caused a hang and was reverted).
+- The bitmap font (`font.c`) is uppercase-only, so typed text always displays in caps.
+- Snake uses WASD, not arrow keys (unparsed extended PS/2 scancodes).
+- The login password is a hardcoded plaintext comparison (`nos`), not a security boundary.
+- nScript's correctness was verified by careful manual tracing, not automated testing — CI only confirms the OS boots, it can't type into the console for us.
 
 ### Try it
 
 ```bash
 make run
 ```
-Type `nos` and press Enter at the login screen, then click **START** in the taskbar to launch Notepad, Snake, or Settings.
+Log in with `nos`, click **START**, open **CONSOLE**, try the script above.
 
 ## Earlier phases
 
@@ -74,7 +84,8 @@ heap.c                     Kernel heap (kmalloc/kfree)
 gfx.c                      Double-buffered drawing primitives
 font.c                     5x7 bitmap font (uppercase only)
 compositor.c               Task-loop wrapper around the window manager
-desktop.c                  Window manager + Login/Notepad/Snake/Settings apps
+desktop.c                  Window manager + Login/Notepad/Snake/Settings/Console apps
+nscript.c                  Small original Lua-inspired scripting interpreter
 vfs.c                      initrd parser / file reader
 pit.c                      PIT timer driver (IRQ0) + tick counter
 task.c / swtch.s            Round-robin scheduler + context switch
@@ -87,7 +98,6 @@ initrd/                    Files packed into initrd.img (hello.bin is generated,
 include/                   Headers for all of the above
 linker.ld                  Links the kernel at 1MB
 Makefile                   Build system (nasm + gcc -m32 + ld + grub-mkrescue + mkinitrd.py)
-nscript.c / include/nscript.h   Phase 8's scripting interpreter -- present but unused, pending debug
 ```
 
 ### Build & Run
@@ -97,13 +107,13 @@ nscript.c / include/nscript.h   Phase 8's scripting interpreter -- present but u
 sudo apt-get install build-essential gcc-multilib nasm xorriso grub-pc-bin qemu-system-x86 python3
 
 make
-make run           # login screen -> desktop with working Notepad/Snake/Settings
+make run           # login screen -> desktop with Notepad/Snake/Settings/Console
 make run-serial     # also streams PMM/heap/VFS/task/syscall debug logs
 ```
 
 ## CI
 
-Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts. Note: this only verifies the OS *boots* -- it does not interact with the desktop, which is exactly how the Phase 8 hang slipped through undetected.
+Every push to `main` triggers a GitHub Actions build that compiles the kernel, builds the initrd, boots it headlessly in QEMU as a smoke test, and uploads `nOS.bin`, `nOS.iso`, and the serial debug log as workflow artifacts. This only verifies the OS *boots* -- it cannot interact with the desktop, which is why GUI/script changes are kept small and isolated rather than bundled into large rewrites.
 
 ## License
 
