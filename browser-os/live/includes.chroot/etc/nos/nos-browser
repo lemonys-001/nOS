@@ -1,0 +1,20 @@
+#!/bin/sh
+# Launch Chromium fullscreen. If it ever exits, nodm restarts the session.
+CHROMIUM_FLAGS="--start-fullscreen \
+--no-first-run \
+--no-default-browser-check \
+--disable-session-crashed-bubble \
+--disable-infobars \
+--disable-features=Translate,MediaRouter \
+--password-store=basic \
+--user-data-dir=/home/nos/.config/chromium \
+--homepage=file:///opt/nos/index.html \
+file:///opt/nos/index.html"
+
+echo NOS_BROWSER_START > /dev/ttyS0 2>/dev/null || true
+
+chromium $CHROMIUM_FLAGS
+rc=$?
+echo NOS_BROWSER_EXIT=$rc > /dev/ttyS0 2>/dev/null || true
+sleep 2
+exit $rc

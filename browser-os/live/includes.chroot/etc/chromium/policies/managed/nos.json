@@ -1,0 +1,16 @@
+{
+  "HomepageLocation": "file:///opt/nos/index.html",
+  "ShowHomeButton": true,
+  "RestoreOnStartup": 4,
+  "RestoreOnStartupURLs": ["file:///opt/nos/index.html"],
+  "NewTabPageLocation": "file:///opt/nos/index.html",
+  "BookmarkBarEnabled": true,
+  "BrowserSignin": 0,
+  "DefaultBrowserSettingEnabled": false,
+  "MetricsReportingEnabled": false,
+  "PromotionalTabsEnabled": false,
+  "DefaultSearchProviderEnabled": true,
+  "DefaultSearchProviderName": "DuckDuckGo",
+  "DefaultSearchProviderSearchURL": "https://duckduckgo.com/?q={searchTerms}",
+  "DefaultSearchProviderSuggestURL": "https://duckduckgo.com/ac/?q={searchTerms}&type=list"
+}

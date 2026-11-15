@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notes — nOS</title>
+<style>
+  :root {
+    --bg: #fafafa; --card: #fff; --text: #202124; --muted: #5f6368; --line: #e0e0e0; --accent: #f5b82e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #141517; --card: #1e2023; --text: #e8eaed; --muted: #9aa0a6; --line: #33363a; }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; height: 100vh; display: flex; flex-direction: column;
+    font-family: "DejaVu Sans", "Liberation Sans", system-ui, sans-serif;
+    background: var(--bg); color: var(--text);
+  }
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: 14px 20px; border-bottom: 1px solid var(--line);
+  }
+  .brand { font-weight: 800; }
+  .save { color: var(--muted); font-size: 13px; margin-left: auto; }
+  button.clear {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  textarea {
+    flex: 1; resize: none; border: 0; outline: none; padding: 20px;
+    font: 15px/1.6 "DejaVu Sans Mono", monospace; background: transparent; color: inherit;
+  }
+</style>
+</head>
+<body>
+<header>
+  <a href="../../index.html" style="text-decoration:none;color:var(--muted);font-size:13px">← start</a>
+  <span class="brand">Notes</span>
+  <span class="save" id="save">saved in this device's storage</span>
+  <button class="clear" id="clear">Clear</button>
+</header>
+<textarea id="pad" placeholder="Type here. Notes save automatically and work fully offline." spellcheck="false"></textarea>
+<script>
+  const pad = document.getElementById('pad');
+  const save = document.getElementById('save');
+  pad.value = localStorage.getItem('nos-notes') || '';
+  let t;
+  pad.addEventListener('input', () => {
+    save.textContent = 'saving…';
+    clearTimeout(t);
+    t = setTimeout(() => {
+      localStorage.setItem('nos-notes', pad.value);
+      save.textContent = 'saved ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+    }, 300);
+  });
+  document.getElementById('clear').addEventListener('click', () => {
+    pad.value = ''; localStorage.removeItem('nos-notes'); save.textContent = 'cleared';
+  });
+</script>
+</body>
+</html>

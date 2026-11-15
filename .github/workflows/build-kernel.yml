@@ -1,11 +1,21 @@
-name: Build nOS
+name: Build legacy nOS kernel
 
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - "legacy/**"
+      - ".github/workflows/build-kernel.yml"
   pull_request:
     branches: [ "main" ]
+    paths:
+      - "legacy/**"
+      - ".github/workflows/build-kernel.yml"
   workflow_dispatch:
+
+defaults:
+  run:
+    working-directory: legacy
 
 jobs:
   build:
@@ -46,19 +56,19 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nOS-kernel
-          path: nOS.bin
+          path: legacy/nOS.bin
           retention-days: 30
 
       - name: Upload bootable ISO
         uses: actions/upload-artifact@v4
         with:
           name: nOS-iso
-          path: nOS.iso
+          path: legacy/nOS.iso
           retention-days: 30
 
       - name: Upload serial debug log
         uses: actions/upload-artifact@v4
         with:
           name: nOS-serial-log
-          path: serial.log
+          path: legacy/serial.log
           retention-days: 30

@@ -1,0 +1,137 @@
+name: Build nOS Browser OS ISO
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "browser-os/**"
+      - ".github/workflows/browser-os.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: browser-os-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Free disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: false
+          docker-images: true
+          swap-storage: false
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            live-build \
+            xorriso \
+            squashfs-tools \
+            qemu-system-x86 \
+            qemu-utils \
+            syslinux-common \
+            isolinux \
+            grub-pc-bin \
+            grub-efi-amd64-bin \
+            mtools \
+            dosfstools \
+            socat
+
+      - name: Build nOS browser ISO
+        run: sudo -E bash browser-os/build.sh
+
+      - name: Verify built rootfs contents
+        run: |
+          SQ=/tmp/nOS-live-build/binary/live/filesystem.squashfs
+          test -f "$SQ"
+          sudo unsquashfs -dest /tmp/nos-rootfs "$SQ" > /dev/null
+          test -x /tmp/nos-rootfs/usr/bin/chromium
+          test -f /tmp/nos-rootfs/opt/nos/index.html
+          test -f /tmp/nos-rootfs/opt/nos/apps/notes/index.html
+          test -x /tmp/nos-rootfs/etc/nos/xsession
+          test -x /tmp/nos-rootfs/etc/nos/nos-browser
+          test -f /tmp/nos-rootfs/etc/chromium/policies/managed/nos.json
+          grep -q '^nos:' /tmp/nos-rootfs/etc/passwd
+          test -e /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/nodm.service
+          test -e /tmp/nos-rootfs/etc/systemd/system/default.target
+          ls -la browser-os/nOS-browser-amd64.iso
+
+      - name: Boot-test the ISO in QEMU (headless, serial markers + screenshot)
+        run: |
+          rm -f serial.log /tmp/qmon.sock /tmp/nos-screen.ppm
+          timeout 600 qemu-system-x86_64 -machine q35 -cpu max -m 2048 -smp 2 \
+            -cdrom browser-os/nOS-browser-amd64.iso \
+            -display none -no-reboot \
+            -netdev user,id=n0 -device e1000,netdev=n0 \
+            -monitor unix:/tmp/qmon.sock,server,nowait \
+            -serial file:serial.log &
+          QPID=$!
+          for i in $(seq 1 100); do
+            grep -q NOS_X_READY serial.log 2>/dev/null && break
+            sleep 6
+          done
+          if ! grep -q NOS_X_READY serial.log; then
+            echo "ERROR: X session never became ready"
+            tail -n 120 serial.log || true
+            kill "$QPID" 2>/dev/null || true
+            exit 1
+          fi
+          sleep 60   # give Chromium time to render under TCG
+          echo screendump /tmp/nos-screen.ppm | socat - UNIX-CONNECT:/tmp/qmon.sock || true
+          sleep 2
+          kill "$QPID" 2>/dev/null || true
+          wait "$QPID" 2>/dev/null || true
+          echo "--- Serial output (tail) ---"
+          tail -n 120 serial.log || true
+          ls -la /tmp/nos-screen.ppm || true
+
+      - name: Checksums
+        run: |
+          cd browser-os
+          sha256sum nOS-browser-amd64.iso > SHA256SUMS
+
+      - name: Upload ISO artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nOS-browser-iso
+          path: |
+            browser-os/nOS-browser-amd64.iso
+            browser-os/SHA256SUMS
+          retention-days: 30
+
+      - name: Upload boot-test evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nOS-boot-test
+          path: |
+            serial.log
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Publish rolling release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view browser-os-latest --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create browser-os-latest --repo "$GITHUB_REPOSITORY" \
+                 --title "nOS Browser OS (latest)" \
+                 --notes "Rolling build of the nOS browser-only ISO. The whole OS is a browser: it boots straight into fullscreen Chromium. See the README for boot and usage notes."
+          gh release upload browser-os-latest \
+            browser-os/nOS-browser-amd64.iso browser-os/SHA256SUMS \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          gh release edit browser-os-latest --repo "$GITHUB_REPOSITORY" --latest

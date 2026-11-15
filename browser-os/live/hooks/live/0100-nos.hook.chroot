@@ -1,0 +1,18 @@
+#!/bin/sh
+# chroot hook: nOS browser session user + boot wiring
+set -e
+
+if ! id nos >/dev/null 2>&1; then
+  useradd --create-home --shell /bin/bash --user-group \
+    --groups audio,video,input,render,netdev,cdrom,plugdev,dialout,tty nos
+fi
+echo 'nos:nos' | chpasswd
+passwd -l root
+
+chmod 440 /etc/sudoers.d/nos
+chmod 755 /etc/nos/xsession /etc/nos/nos-browser
+
+systemctl enable nodm.service 2>/dev/null || \
+  ln -sf /lib/systemd/system/nodm.service /etc/systemd/system/multi-user.target.wants/nodm.service
+systemctl set-default graphical.target 2>/dev/null || \
+  ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target

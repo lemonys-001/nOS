@@ -1,0 +1,13 @@
+#!/bin/sh
+# nOS session: the browser IS the operating system.
+exec >>/home/nos/nos-session.log 2>&1
+echo "=== nOS session $(date) ==="
+
+xset s off -dpms 2>/dev/null || true
+
+echo NOS_X_READY > /dev/ttyS0 2>/dev/null || true
+
+openbox &
+sleep 1
+
+exec /etc/nos/nos-browser

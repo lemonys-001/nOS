@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nOS — start</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main class="start">
+  <header class="top">
+    <div class="brand"><span class="brand-mark">n</span>nOS</div>
+    <div class="clock" id="clock" aria-label="Time"></div>
+  </header>
+
+  <section class="hero">
+    <h1>What do you want to open?</h1>
+    <form class="search" action="https://duckduckgo.com/" method="get">
+      <input id="q" name="q" type="search" autocomplete="off" placeholder="Search the web…" autofocus>
+      <button type="submit">Search</button>
+    </form>
+  </section>
+
+  <section class="tiles" aria-label="Apps">
+    <a class="tile" href="https://mail.google.com/">
+      <span class="mark" style="--c:#ea4335">M</span><span class="name">Gmail</span>
+    </a>
+    <a class="tile" href="https://drive.google.com/">
+      <span class="mark" style="--c:#1a73e8">D</span><span class="name">Drive</span>
+    </a>
+    <a class="tile" href="https://docs.google.com/">
+      <span class="mark" style="--c:#188038">W</span><span class="name">Docs</span>
+    </a>
+    <a class="tile" href="https://www.youtube.com/">
+      <span class="mark" style="--c:#ff0000">Y</span><span class="name">YouTube</span>
+    </a>
+    <a class="tile" href="https://www.google.com/maps/">
+      <span class="mark" style="--c:#34a853">M</span><span class="name">Maps</span>
+    </a>
+    <a class="tile" href="https://github.com/">
+      <span class="mark" style="--c:#1f2328">G</span><span class="name">GitHub</span>
+    </a>
+    <a class="tile" href="https://www.wikipedia.org/">
+      <span class="mark" style="--c:#636466">W</span><span class="name">Wikipedia</span>
+    </a>
+    <a class="tile" href="https://www.reddit.com/">
+      <span class="mark" style="--c:#ff4500">R</span><span class="name">Reddit</span>
+    </a>
+    <a class="tile offline" href="apps/notes/index.html">
+      <span class="mark" style="--c:#f5b82e">N</span><span class="name">Notes</span>
+    </a>
+    <a class="tile" href="https://lemonyss.dpdns.org/">
+      <span class="mark" style="--c:#e8c547">L</span><span class="name">LemonOS</span>
+    </a>
+  </section>
+
+  <footer class="status">
+    <span id="net" class="net">checking network…</span>
+    <span class="hints">Ctrl+L address bar · Ctrl+T new tab · Ctrl+Alt+F2 network setup</span>
+  </footer>
+</main>
+<script src="app.js"></script>
+</body>
+</html>
