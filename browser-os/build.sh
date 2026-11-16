@@ -31,6 +31,12 @@ cp -a "$ROOT/live/package-lists" config/
 cp -a "$ROOT/live/includes.chroot" config/
 cp -a "$ROOT/live/hooks" config/
 
+# isolinux's template waits forever at the boot menu (timeout 0);
+# boot the default entry after 3 seconds instead
+mkdir -p config/bootloaders/isolinux
+printf 'include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 30\n' \
+  > config/bootloaders/isolinux/isolinux.cfg
+
 lb build
 
 cp live-image-amd64.hybrid.iso "$OUT"
