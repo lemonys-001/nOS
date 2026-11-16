@@ -90,6 +90,9 @@ jobs:
           fi
           check default-target /tmp/nos-rootfs/etc/systemd/system/default.target
           ls -la browser-os/nOS-browser-amd64.iso
+          echo "--- /etc/systemd/system in rootfs ---"
+          ls -la /tmp/nos-rootfs/etc/systemd/system/ || true
+          ls -la /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/ || true
           exit $fail
 
       - name: Boot-test the ISO in QEMU (headless, serial markers + screenshot)

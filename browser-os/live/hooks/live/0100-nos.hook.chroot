@@ -1,20 +1,32 @@
 #!/bin/sh
 # chroot hook: nOS browser session user + boot wiring
-set -e
+set -u
+
+echo "nos-hook: begin"
 
 if ! id nos >/dev/null 2>&1; then
   useradd --create-home --shell /bin/bash --user-group \
     --groups audio,video,input,render,netdev,cdrom,plugdev,dialout,tty nos
+  echo "nos-hook: user created rc=$?"
+else
+  echo "nos-hook: user already exists"
 fi
-echo 'nos:nos' | chpasswd
-passwd -l root
+echo 'nos:nos' | chpasswd; echo "nos-hook: chpasswd rc=$?"
+passwd -l root || echo "nos-hook: root lock rc=$?"
 
-chmod 440 /etc/sudoers.d/nos
-chmod 755 /etc/nos/xsession /etc/nos/nos-browser
+chmod 440 /etc/sudoers.d/nos; echo "nos-hook: sudoers chmod rc=$?"
+chmod 755 /etc/nos/xsession /etc/nos/nos-browser; echo "nos-hook: session chmod rc=$?"
 
-systemctl enable nodm.service 2>/dev/null || true
-# deterministic: graphical.target pulls in multi-user.target, so this starts nodm
+systemctl enable nodm.service; echo "nos-hook: systemctl enable rc=$?"
+
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/nodm.service /etc/systemd/system/multi-user.target.wants/nodm.service
-systemctl set-default graphical.target 2>/dev/null || \
+echo "nos-hook: nodm symlink rc=$?"
+ls -la /etc/systemd/system/multi-user.target.wants/ | grep nodm || echo "nos-hook: SYMLINK NOT LISTED"
+
+systemctl set-default graphical.target || \
   ln -sf /lib/systemd/system/graphical.target /etc/systemd/system/default.target
+echo "nos-hook: default target rc=$?"
+readlink /etc/systemd/system/default.target
+
+echo "nos-hook: done"
