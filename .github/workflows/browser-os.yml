@@ -103,14 +103,14 @@ jobs:
       - name: Boot-test the ISO in QEMU (headless, serial markers + screenshot)
         run: |
           rm -f serial.log /tmp/qmon.sock /tmp/nos-screen.ppm
-          timeout 600 qemu-system-x86_64 -machine q35 -cpu max -m 2048 -smp 2 \
+          timeout 900 qemu-system-x86_64 -machine q35 -cpu max -m 2048 -smp 2 \
             -cdrom browser-os/nOS-browser-amd64.iso \
             -display none -no-reboot \
             -netdev user,id=n0 -device e1000,netdev=n0 \
             -monitor unix:/tmp/qmon.sock,server,nowait \
             -serial file:serial.log &
           QPID=$!
-          for i in $(seq 1 100); do
+          for i in $(seq 1 150); do
             grep -q NOS_X_READY serial.log 2>/dev/null && break
             sleep 6
           done

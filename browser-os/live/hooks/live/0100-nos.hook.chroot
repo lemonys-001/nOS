@@ -22,6 +22,8 @@ systemctl enable nodm.service; echo "nos-hook: systemctl enable rc=$?"
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /lib/systemd/system/nodm.service /etc/systemd/system/multi-user.target.wants/nodm.service
 echo "nos-hook: nodm symlink rc=$?"
+ln -sf /etc/systemd/system/nos-debug.service /etc/systemd/system/multi-user.target.wants/nos-debug.service
+echo "nos-hook: debug symlink rc=$?"
 ls -la /etc/systemd/system/multi-user.target.wants/ | grep nodm || echo "nos-hook: SYMLINK NOT LISTED"
 
 systemctl set-default graphical.target || \

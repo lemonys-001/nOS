@@ -1,0 +1,12 @@
+[Unit]
+Description=nOS boot diagnostics to serial console
+After=multi-user.target
+
+[Service]
+Type=oneshot
+# dump session state to /dev/ttyS0 every 60s for 9 rounds, so CI can see
+# whether nodm/X/Chromium actually started
+ExecStart=/bin/sh -c 'i=1; while [ $i -le 9 ]; do sleep 60; { echo "=== nos-debug round $i ==="; systemctl is-active nodm; ps ax | grep -E "nodm|Xorg|chromium" | grep -v grep; ls -la /home/nos/ 2>/dev/null; tail -5 /home/nos/nos-session.log 2>/dev/null; journalctl -b --no-pager -p err | tail -25; } >> /dev/ttyS0 2>&1; i=$((i+1)); done'
+
+[Install]
+WantedBy=multi-user.target
