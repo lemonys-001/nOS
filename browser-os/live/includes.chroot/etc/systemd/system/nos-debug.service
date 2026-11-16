@@ -6,7 +6,7 @@ After=multi-user.target
 Type=oneshot
 # dump session state to /dev/ttyS0 every 60s for 9 rounds, so CI can see
 # whether the browser session actually started
-ExecStart=/bin/sh -c 'i=1; while [ $i -le 9 ]; do sleep 60; { echo "=== nos-debug round $i ==="; systemctl is-active nos-session; systemctl status nos-session --no-pager -l 2>&1 | head -12; ps ax | grep -E "Xorg|chromium|openbox|xinit" | grep -v grep; tail -8 /home/nos/nos-session.log 2>/dev/null; journalctl -b --no-pager -p err | tail -10; } >> /dev/ttyS0 2>&1; i=$((i+1)); done'
+ExecStart=/bin/sh -c 'i=1; while [ $i -le 9 ]; do sleep 60; { echo "=== nos-debug round $i ==="; systemctl is-active nos-session; journalctl -u nos-session --no-pager | tail -40; ps ax | grep -E "Xorg|chromium|openbox|xinit" | grep -v grep; tail -8 /home/nos/nos-session.log 2>/dev/null; echo "--- /dev/dri:"; ls -la /dev/dri 2>/dev/null; dmesg | grep -iE "drm|virtio.?gpu" | tail -8; } >> /dev/ttyS0 2>&1; i=$((i+1)); done'
 
 [Install]
 WantedBy=multi-user.target
