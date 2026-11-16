@@ -80,6 +80,8 @@ jobs:
           check launcher     /tmp/nos-rootfs/etc/nos/nos-browser
           check policies     /tmp/nos-rootfs/etc/chromium/policies/managed/nos.json
           check session-unit /tmp/nos-rootfs/etc/systemd/system/nos-session.service
+          check xorg-bin     /tmp/nos-rootfs/usr/bin/Xorg
+          check xinit-bin    /tmp/nos-rootfs/usr/bin/xinit
           grep -q '^nos:' /tmp/nos-rootfs/etc/passwd || { echo "MISS user nos"; fail=1; }
           test -x /tmp/nos-rootfs/etc/nos/xsession || { echo "MISS exec bit: xsession"; fail=1; }
           test -x /tmp/nos-rootfs/etc/nos/nos-browser || { echo "MISS exec bit: nos-browser"; fail=1; }

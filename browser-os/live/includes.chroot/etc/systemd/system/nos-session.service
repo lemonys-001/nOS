@@ -13,7 +13,7 @@ TTYVHangup=yes
 StandardInput=tty
 StandardOutput=journal
 StandardError=journal
-ExecStart=/usr/bin/xinit /etc/nos/xsession -- /usr/bin/X vt7 -nolisten tcp
+ExecStart=/bin/sh -c 'exec /usr/bin/xinit /etc/nos/xsession -- /usr/bin/X vt7 -nolisten tcp >>/home/nos/nos-session.log 2>&1'
 Restart=always
 RestartSec=2
 
