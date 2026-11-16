@@ -70,7 +70,9 @@ jobs:
           test -f "$SQ" || { echo "no squashfs at $SQ"; exit 1; }
           sudo unsquashfs -dest /tmp/nos-rootfs "$SQ" > /dev/null
           fail=0
-          check() { if [ -e "$2" ]; then echo "OK   $1"; else echo "MISS $1: $2"; fail=1; fi }
+          # squashfs symlinks are absolute and dangle after unsquashfs, so
+          # test with -L (link exists) as well as -e (target resolves)
+          check() { if [ -e "$2" ] || [ -L "$2" ]; then echo "OK   $1"; else echo "MISS $1: $2"; fail=1; fi }
           check chromium     /tmp/nos-rootfs/usr/bin/chromium
           check homepage     /tmp/nos-rootfs/opt/nos/index.html
           check notes        /tmp/nos-rootfs/opt/nos/apps/notes/index.html
