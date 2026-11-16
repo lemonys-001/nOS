@@ -9,6 +9,8 @@ fonts-dejavu-core
 fonts-liberation2
 fonts-noto-color-emoji
 dbus-x11
+dbus
+libpam-systemd
 network-manager
 wpasupplicant
 firmware-linux-free
