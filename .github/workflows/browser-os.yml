@@ -84,8 +84,11 @@ jobs:
           test -x /tmp/nos-rootfs/etc/nos/xsession || { echo "MISS exec bit: xsession"; fail=1; }
           test -x /tmp/nos-rootfs/etc/nos/nos-browser || { echo "MISS exec bit: nos-browser"; fail=1; }
           if [ -e /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/nodm.service ] \
+             || [ -L /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/nodm.service ] \
              || [ -e /tmp/nos-rootfs/etc/systemd/system/graphical.target.wants/nodm.service ] \
-             || [ -e /tmp/nos-rootfs/etc/systemd/system/display-manager.service ]; then
+             || [ -L /tmp/nos-rootfs/etc/systemd/system/graphical.target.wants/nodm.service ] \
+             || [ -e /tmp/nos-rootfs/etc/systemd/system/display-manager.service ] \
+             || [ -L /tmp/nos-rootfs/etc/systemd/system/display-manager.service ]; then
             echo "OK   nodm enabled"
           else
             echo "MISS nodm not enabled"; fail=1
