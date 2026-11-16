@@ -38,7 +38,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            live-build \
             xorriso \
             squashfs-tools \
             qemu-system-x86 \
@@ -49,7 +48,17 @@ jobs:
             grub-efi-amd64-bin \
             mtools \
             dosfstools \
-            socat
+            socat \
+            debootstrap
+
+      # Ubuntu's live-build is a 2012-era fork that lacks modern options;
+      # use Debian's own live-build (pure shell scripts) to build bookworm.
+      - name: Install Debian live-build
+        run: |
+          curl -fsSL -o /tmp/live-build.deb \
+            http://deb.debian.org/debian/pool/main/l/live-build/live-build_20230502_all.deb
+          sudo dpkg -i /tmp/live-build.deb
+          lb --version || true
 
       - name: Build nOS browser ISO
         run: sudo -E bash browser-os/build.sh
