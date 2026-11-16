@@ -101,7 +101,6 @@ jobs:
         run: |
           rm -f serial.log /tmp/qmon.sock /tmp/nos-screen.ppm
           timeout 900 qemu-system-x86_64 -machine q35 -cpu max -m 2048 -smp 2 \
-            -device virtio-gpu-pci \
             -cdrom browser-os/nOS-browser-amd64.iso \
             -display none -no-reboot \
             -netdev user,id=n0 -device e1000,netdev=n0 \
