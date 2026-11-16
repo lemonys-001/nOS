@@ -67,18 +67,30 @@ jobs:
       - name: Verify built rootfs contents
         run: |
           SQ=/tmp/nOS-live-build/binary/live/filesystem.squashfs
-          test -f "$SQ"
+          test -f "$SQ" || { echo "no squashfs at $SQ"; exit 1; }
           sudo unsquashfs -dest /tmp/nos-rootfs "$SQ" > /dev/null
-          test -x /tmp/nos-rootfs/usr/bin/chromium
-          test -f /tmp/nos-rootfs/opt/nos/index.html
-          test -f /tmp/nos-rootfs/opt/nos/apps/notes/index.html
-          test -x /tmp/nos-rootfs/etc/nos/xsession
-          test -x /tmp/nos-rootfs/etc/nos/nos-browser
-          test -f /tmp/nos-rootfs/etc/chromium/policies/managed/nos.json
-          grep -q '^nos:' /tmp/nos-rootfs/etc/passwd
-          test -e /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/nodm.service
-          test -e /tmp/nos-rootfs/etc/systemd/system/default.target
+          fail=0
+          check() { if [ -e "$2" ]; then echo "OK   $1"; else echo "MISS $1: $2"; fail=1; fi }
+          check chromium     /tmp/nos-rootfs/usr/bin/chromium
+          check homepage     /tmp/nos-rootfs/opt/nos/index.html
+          check notes        /tmp/nos-rootfs/opt/nos/apps/notes/index.html
+          check xsession     /tmp/nos-rootfs/etc/nos/xsession
+          check launcher     /tmp/nos-rootfs/etc/nos/nos-browser
+          check policies     /tmp/nos-rootfs/etc/chromium/policies/managed/nos.json
+          check nodm-unit    /tmp/nos-rootfs/lib/systemd/system/nodm.service
+          grep -q '^nos:' /tmp/nos-rootfs/etc/passwd || { echo "MISS user nos"; fail=1; }
+          test -x /tmp/nos-rootfs/etc/nos/xsession || { echo "MISS exec bit: xsession"; fail=1; }
+          test -x /tmp/nos-rootfs/etc/nos/nos-browser || { echo "MISS exec bit: nos-browser"; fail=1; }
+          if [ -e /tmp/nos-rootfs/etc/systemd/system/multi-user.target.wants/nodm.service ] \
+             || [ -e /tmp/nos-rootfs/etc/systemd/system/graphical.target.wants/nodm.service ] \
+             || [ -e /tmp/nos-rootfs/etc/systemd/system/display-manager.service ]; then
+            echo "OK   nodm enabled"
+          else
+            echo "MISS nodm not enabled"; fail=1
+          fi
+          check default-target /tmp/nos-rootfs/etc/systemd/system/default.target
           ls -la browser-os/nOS-browser-amd64.iso
+          exit $fail
 
       - name: Boot-test the ISO in QEMU (headless, serial markers + screenshot)
         run: |
