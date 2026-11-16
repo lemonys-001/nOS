@@ -49,7 +49,8 @@ jobs:
             mtools \
             dosfstools \
             socat \
-            debootstrap
+            debootstrap \
+            debian-archive-keyring
 
       # Ubuntu's live-build is a 2012-era fork that lacks modern options;
       # use Debian's own live-build (pure shell scripts) to build bookworm.
