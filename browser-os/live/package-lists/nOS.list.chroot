@@ -4,7 +4,6 @@ xserver-xorg-input-all
 x11-xserver-utils
 xinit
 openbox
-nodm
 chromium
 fonts-dejavu-core
 fonts-liberation2

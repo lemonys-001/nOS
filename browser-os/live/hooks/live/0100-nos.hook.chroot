@@ -17,11 +17,9 @@ passwd -l root || echo "nos-hook: root lock rc=$?"
 chmod 440 /etc/sudoers.d/nos; echo "nos-hook: sudoers chmod rc=$?"
 chmod 755 /etc/nos/xsession /etc/nos/nos-browser; echo "nos-hook: session chmod rc=$?"
 
-systemctl enable nodm.service; echo "nos-hook: systemctl enable rc=$?"
-
 mkdir -p /etc/systemd/system/multi-user.target.wants
-ln -sf /lib/systemd/system/nodm.service /etc/systemd/system/multi-user.target.wants/nodm.service
-echo "nos-hook: nodm symlink rc=$?"
+ln -sf /etc/systemd/system/nos-session.service /etc/systemd/system/multi-user.target.wants/nos-session.service
+echo "nos-hook: session symlink rc=$?"
 ln -sf /etc/systemd/system/nos-debug.service /etc/systemd/system/multi-user.target.wants/nos-debug.service
 echo "nos-hook: debug symlink rc=$?"
 ls -la /etc/systemd/system/multi-user.target.wants/ | grep nodm || echo "nos-hook: SYMLINK NOT LISTED"

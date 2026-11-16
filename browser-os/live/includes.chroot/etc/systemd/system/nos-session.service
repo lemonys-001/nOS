@@ -1,0 +1,21 @@
+[Unit]
+Description=nOS browser session (Xorg + Chromium fullscreen)
+After=systemd-user-sessions.service multi-user.target
+Conflicts=getty@tty7.service
+
+[Service]
+User=nos
+PAMName=login
+WorkingDirectory=/home/nos
+TTYPath=/dev/tty7
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+ExecStart=/usr/bin/xinit /etc/nos/xsession -- /usr/bin/X vt7 -nolisten tcp
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
