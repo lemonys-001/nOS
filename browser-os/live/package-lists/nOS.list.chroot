@@ -1,4 +1,5 @@
 xserver-xorg
+xserver-xorg-legacy
 xserver-xorg-video-all
 xserver-xorg-input-all
 x11-xserver-utils
