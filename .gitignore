@@ -4,3 +4,5 @@
 isodir/
 serial.log
 browser-os/.build/
+__pycache__/
+*.pyc
