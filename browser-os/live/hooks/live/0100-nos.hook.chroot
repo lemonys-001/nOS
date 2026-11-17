@@ -28,6 +28,8 @@ echo "nos-hook: Xwrapper rc=$?"
 mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /etc/systemd/system/nos-session.service /etc/systemd/system/multi-user.target.wants/nos-session.service
 echo "nos-hook: session symlink rc=$?"
+ln -sf /etc/systemd/system/nos-bridge.service /etc/systemd/system/multi-user.target.wants/nos-bridge.service
+echo "nos-hook: bridge symlink rc=$?"
 ln -sf /etc/systemd/system/nos-debug.service /etc/systemd/system/multi-user.target.wants/nos-debug.service
 echo "nos-hook: debug symlink rc=$?"
 ls -la /etc/systemd/system/multi-user.target.wants/ | grep nos- || echo "nos-hook: SYMLINK NOT LISTED"

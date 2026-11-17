@@ -1,0 +1,11 @@
+[Unit]
+Description=nOS host bridge (real machine access for the web desktop)
+After=multi-user.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/nos/host-bridge.py
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

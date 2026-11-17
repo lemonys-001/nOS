@@ -19,6 +19,11 @@ firmware-iwlwifi
 firmware-realtek
 firmware-atheros
 firmware-brcm80211
+parted
+dosfstools
+squashfs-tools
+grub-efi-amd64-bin
+grub-pc-bin
 sudo
 alsa-utils
 pulseaudio
@@ -28,4 +33,9 @@ less
 nano
 iproute2
 iw
+parted
+dosfstools
+squashfs-tools
+grub-efi-amd64-bin
+grub-pc-bin
 rfkill

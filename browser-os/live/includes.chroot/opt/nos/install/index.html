@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Install nOS</title>
+<link rel="icon" href="/lemonos/favicon.svg">
+<style>
+  :root {
+    --bg:#0e0f13; --panel:#16181f; --line:#262a33;
+    --accent:#f5d547; --accent-dim:#b9991f; --text:#e8eaf0; --muted:#8a90a0;
+    --danger:#e05252; --ok:#5ed17e;
+  }
+  * { box-sizing:border-box; margin:0; }
+  body {
+    background: radial-gradient(1200px 800px at 70% 20%, #1c2030 0%, var(--bg) 55%, #090a0d 100%);
+    color:var(--text); min-height:100vh; display:flex; align-items:center; justify-content:center;
+    font-family:system-ui,sans-serif; padding:24px;
+  }
+  .card {
+    width:min(760px,100%); background:var(--panel); border:1px solid var(--line);
+    border-radius:18px; padding:40px 44px; box-shadow:0 30px 80px rgba(0,0,0,.5);
+  }
+  header { display:flex; align-items:center; gap:14px; margin-bottom:6px; }
+  .wheel { width:44px; height:44px; }
+  h1 { font-size:26px; letter-spacing:-.02em; }
+  .sub { color:var(--muted); font-size:14px; margin:10px 0 26px; line-height:1.5; }
+  .disks { display:grid; gap:10px; margin-bottom:22px; }
+  .disk {
+    display:flex; align-items:center; gap:14px; padding:14px 16px;
+    border:1.5px solid var(--line); border-radius:12px; cursor:pointer;
+    transition:border-color .15s, background .15s;
+  }
+  .disk:hover { border-color:var(--accent-dim); }
+  .disk.sel { border-color:var(--accent); background:rgba(245,213,71,.06); }
+  .disk .ico { width:34px; height:34px; flex:none; color:var(--accent); }
+  .disk .name { font-weight:700; font-size:15px; }
+  .disk .meta { color:var(--muted); font-size:12.5px; margin-top:2px; }
+  .disk .size { margin-left:auto; font-weight:700; color:var(--muted); font-variant-numeric:tabular-nums; }
+  .warn {
+    display:flex; gap:10px; background:rgba(224,82,82,.08); border:1px solid rgba(224,82,82,.35);
+    color:#f0a0a0; border-radius:10px; padding:12px 14px; font-size:13px; line-height:1.45; margin-bottom:22px;
+  }
+  .btnrow { display:flex; gap:10px; }
+  button {
+    font:inherit; font-weight:700; border:0; border-radius:10px; padding:13px 22px;
+    cursor:pointer; background:#22252e; color:var(--text); transition:transform .06s, filter .15s;
+  }
+  button:hover { filter:brightness(1.15); }
+  button:active { transform:scale(.98); }
+  button.primary { background:var(--accent); color:#14130a; }
+  button.ghost { background:transparent; border:1px solid var(--line); color:var(--muted); }
+  .progress { margin-top:8px; }
+  .bar { height:8px; border-radius:6px; background:#22252e; overflow:hidden; margin:18px 0 10px; }
+  .bar i {
+    display:block; height:100%; width:15%; border-radius:6px; background:var(--accent);
+    transform-origin:left; transition:width .4s;
+  }
+  .log {
+    font:12px/1.6 ui-monospace,monospace; color:var(--muted); background:#0c0d11;
+    border:1px solid var(--line); border-radius:10px; padding:14px; height:180px;
+    overflow-y:auto; white-space:pre-wrap; margin-top:14px;
+  }
+  .done { text-align:center; padding:30px 0; }
+  .done .wheel { width:64px; height:64px; margin:0 auto 18px; }
+  .done h2 { font-size:22px; margin-bottom:8px; }
+  .done p { color:var(--muted); font-size:14px; margin-bottom:24px; }
+  .err { color:#f0a0a0; }
+  .hidden { display:none; }
+  footer { color:var(--muted); font-size:12px; margin-top:26px; text-align:center; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="lemon-wheel" viewBox="0 0 100 100">
+  <circle cx="50" cy="50" r="46" fill="#f5d547"/>
+  <circle cx="50" cy="50" r="34" fill="#fdf3c0"/>
+  <g stroke="#f5d547" stroke-width="5">
+    <path d="M50 16v68M16 50h68M27 27l46 46M73 27L27 73"/>
+  </g>
+  <circle cx="50" cy="50" r="8" fill="#fdf3c0"/>
+</symbol>
+</defs></svg>
+
+<div class="card">
+  <div id="step-disks">
+    <header>
+      <svg class="wheel"><use href="#lemon-wheel"/></svg>
+      <h1>Install nOS</h1>
+    </header>
+    <p class="sub">nOS is currently running from the DVD/USB (live mode).
+    Pick a disk to install it permanently. After installing, the machine boots
+    straight into nOS — with your apps, files and settings kept between sessions.</p>
+
+    <div class="disks" id="disks"><div class="sub">Scanning disks…</div></div>
+
+    <div class="warn"><span>⚠</span>
+      <span>Everything on the selected disk will be erased and replaced with nOS.
+      This cannot be undone.</span>
+    </div>
+
+    <div class="btnrow">
+      <button class="ghost" id="back">Cancel</button>
+      <button class="primary" id="install" disabled>Install nOS</button>
+    </div>
+  </div>
+
+  <div id="step-run" class="hidden">
+    <header>
+      <svg class="wheel"><use href="#lemon-wheel"/></svg>
+      <h1>Installing nOS…</h1>
+    </header>
+    <p class="sub" id="phase">Preparing…</p>
+    <div class="progress">
+      <div class="bar"><i id="fill"></i></div>
+    </div>
+    <div class="log" id="log"></div>
+  </div>
+
+  <div id="step-done" class="hidden">
+    <div class="done">
+      <svg class="wheel"><use href="#lemon-wheel"/></svg>
+      <h2>nOS is installed!</h2>
+      <p>Remove the install media if asked, then reboot.<br>
+      The machine starts straight into nOS from now on.</p>
+      <button class="primary" id="reboot">Reboot now</button>
+    </div>
+  </div>
+
+  <footer>nOS · install utility</footer>
+</div>
+
+<script>
+const fmt = b => b >= 1e9 ? (b/1e9).toFixed(b>=1e10?0:1)+' GB' : (b/1e6).toFixed(0)+' MB';
+let disk = null;
+
+const $ = id => document.getElementById(id);
+
+async function loadDisks() {
+  try {
+    const j = await (await fetch('/api/disks')).json();
+    const el = $('disks');
+    el.textContent = '';
+    (j.blockdevices || []).filter(d => d.type === 'disk').forEach(d => {
+      const row = document.createElement('div');
+      row.className = 'disk';
+      row.innerHTML =
+        '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">' +
+        '<rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="12" cy="12" r="4.5"/>' +
+        '<path d="M12 9.5a2.5 2.5 0 0 1 0 5"/></svg>' +
+        '<div><div class="name">' + d.name + '</div>' +
+        '<div class="meta">' + (d.model || 'disk') + '</div></div>' +
+        '<div class="size">' + fmt(d.size || 0) + '</div>';
+      row.addEventListener('click', () => {
+        document.querySelectorAll('.disk').forEach(x => x.classList.remove('sel'));
+        row.classList.add('sel');
+        disk = '/dev/' + d.name;
+        $('install').disabled = false;
+      });
+      el.appendChild(row);
+    });
+    if (!$('.disk')) $('disks').textContent = 'No disks found on this machine.';
+  } catch (e) {
+    $('disks').textContent = 'Could not read disk list: ' + e;
+  }
+}
+loadDisks();
+
+$('back').addEventListener('click', () => location.reload());
+$('install').addEventListener('click', async () => {
+  if (!disk) return;
+  const ok = confirm('ERASE ' + disk + ' and install nOS?\n\nAll data on this disk will be lost.');
+  if (!ok) return;
+  const r = await fetch('/api/install', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ disk })
+  });
+  const j = await r.json();
+  if (!j.ok) { alert('Install failed to start: ' + (j.error || '?')); return; }
+  $('step-disks').classList.add('hidden');
+  $('step-run').classList.remove('hidden');
+  poll();
+});
+
+const PHASES = [
+  [/Copying system/i, 'Copying the system to your disk…', 30],
+  [/bootloader|grub|done: grub|done: update/i, 'Setting up the bootloader…', 75],
+  [/fstab|configuring/i, 'Configuring…', 60],
+  [/COMPLETE/i, 'Almost done…', 100]
+];
+
+async function poll() {
+  const j = await (await fetch('/api/install/status')).json();
+  $('log').textContent = j.log || '';
+  $('log').scrollTop = $('log').scrollHeight;
+  let pct = 8;
+  for (const [re, phase, p] of PHASES) {
+    if (re.test(j.log || '')) { pct = Math.max(pct, p); $('phase').textContent = phase; }
+  }
+  $('fill').style.width = (j.error ? 100 : pct) + '%';
+  if (j.error) {
+    $('phase').textContent = '';
+    $('phase').className = 'sub err';
+    $('phase').textContent = 'Install failed: ' + j.error;
+    return;
+  }
+  if (j.done && !j.running) {
+    $('step-run').classList.add('hidden');
+    $('step-done').classList.remove('hidden');
+    return;
+  }
+  setTimeout(poll, 2000);
+}
+
+$('reboot').addEventListener('click', async () => {
+  await fetch('/api/reboot', { method: 'POST' });
+  document.body.innerHTML = '<div class="card"><p class="sub">Rebooting…</p></div>';
+});
+</script>
+</body>
+</html>

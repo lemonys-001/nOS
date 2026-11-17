@@ -126,10 +126,45 @@
     }
   };
 
+  const machine = {
+    key: 'machine',
+    label: 'Machine',
+    icon: upIcon,
+    isApp: false,
+    path: '/home/nos',
+    async load() {
+      const r = await fetch('/api/files?path=' + encodeURIComponent(this.path));
+      if (!r.ok) return [];
+      const j = await r.json();
+      return (j.entries || []).map((e) => ({
+        id: 'm:' + e.path,
+        name: e.name,
+        updated: e.mtime || 0,
+        size: e.dir ? 0 : e.size,
+        type: e.dir ? 'folder' : 'file',
+        kind: 'machine',
+        dir: e.dir,
+        mpath: e.path
+      }));
+    },
+    async rename() {},
+    async remove(item) {
+      await fetch('/api/files?path=' + encodeURIComponent(item.mpath), { method: 'DELETE' });
+    },
+    async open(item) {
+      if (item.dir) {
+        this.path = item.mpath;
+      } else {
+        window.open('/api/file?path=' + encodeURIComponent(item.mpath));
+      }
+    }
+  };
+
   function places() {
     const list = [];
     if (APPS.notes) list.push(placeFromApp('notes', 'Notes', 'notes', noteIcon, 'title'));
     list.push(uploads);
+    list.push(machine);
     return list;
   }
 
@@ -268,6 +303,19 @@
       }
 
       async function refreshUsage() {
+        let m = null;
+        try {
+          const r = await fetch('/api/storage');
+          if (r.ok) m = await r.json();
+        } catch (e) {}
+        if (m && m.filesystems && m.filesystems.length) {
+          const f = m.filesystems[0];
+          usageText.textContent = 'Machine · ' + UI.fmtBytes(f.used) + ' of ' + UI.fmtBytes(f.total) + ' (' + f.target + ')';
+          usageTrack.hidden = false;
+          usageFill.style.transform = 'scaleX(' + Math.min(1, f.used / f.total) + ')';
+          usageFill.classList.toggle('full', f.pct >= 90);
+          return;
+        }
         const u = await Store.usage();
         if (!u) {
           usageText.textContent = 'Storage unavailable';
@@ -319,7 +367,7 @@
           body.appendChild(UI.el('span', 'app-row-meta', UI.fmtDate(item.updated) + (item.size ? ' · ' + UI.fmtBytes(item.size) : '')));
           row.append(ico, body);
           row.addEventListener('click', () => { selected = item; renderList(); });
-          row.addEventListener('dblclick', () => place.open(item));
+          row.addEventListener('dblclick', async () => { await place.open(item); if (place.key === 'machine') { selected = null; await refresh(); } });
           row.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); place.open(item); }
           });
@@ -333,7 +381,7 @@
       const uploadBtn = UI.btn('Upload', '');
       uploadBtn.addEventListener('click', () => fileInput.click());
       const openBtn = UI.btn('Open');
-      openBtn.addEventListener('click', () => { if (selected) place.open(selected); else UI.toast('Select an item first.'); });
+      openBtn.addEventListener('click', async () => { if (!selected) { UI.toast('Select an item first.'); return; } await place.open(selected); if (place.key === 'machine') { selected = null; await refresh(); } });
       const renameBtn = UI.btn('Rename');
       renameBtn.addEventListener('click', async () => {
         if (!selected) { UI.toast('Select an item first.'); return; }

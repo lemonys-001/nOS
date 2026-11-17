@@ -8,8 +8,8 @@ CHROMIUM_FLAGS="--start-fullscreen \
 --disable-features=Translate,MediaRouter \
 --password-store=basic \
 --user-data-dir=/home/nos/.config/chromium \
---homepage=file:///opt/nos/index.html \
-file:///opt/nos/index.html"
+--homepage=http://127.0.0.1:8080/lemonos/index.html \
+http://127.0.0.1:8080/lemonos/index.html"
 
 echo NOS_BROWSER_START > /dev/ttyS0 2>/dev/null || true
 

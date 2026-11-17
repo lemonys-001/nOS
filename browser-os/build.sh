@@ -37,6 +37,19 @@ mkdir -p config/bootloaders/isolinux
 printf 'include menu.cfg\ndefault vesamenu.c32\nprompt 0\ntimeout 30\n' \
   > config/bootloaders/isolinux/isolinux.cfg
 
+# bundle the ArtCraft creative suite offline (fetched at build time, ~280 MB)
+echo "Fetching ArtCraft suite for offline bundling..."
+mkdir -p config/includes.chroot/opt/nos/artcraft
+curl -fsSL -o /tmp/artcraft.tar.gz https://codeload.github.com/lemonys-001/artcraft/tar.gz/HEAD
+tar -xzf /tmp/artcraft.tar.gz -C /tmp
+AC=/tmp/artcraft-$(tar -tzf /tmp/artcraft.tar.gz | head -1 | cut -d/ -f2)
+for app in pdfcraft designcraft effectcraft figcraft cadcraft lightcraft soundcraft; do
+  cp -a "$AC/$app" config/includes.chroot/opt/nos/artcraft/
+done
+cp -a "$AC/index.html" "$AC/README.md" config/includes.chroot/opt/nos/artcraft/ 2>/dev/null || true
+rm -rf "$AC" /tmp/artcraft.tar.gz
+echo "ArtCraft bundled."
+
 lb build
 
 cp live-image-amd64.hybrid.iso "$OUT"

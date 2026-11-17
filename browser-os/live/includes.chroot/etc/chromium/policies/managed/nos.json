@@ -1,9 +1,9 @@
 {
-  "HomepageLocation": "file:///opt/nos/lemonos/index.html",
+  "HomepageLocation": "http://127.0.0.1:8080/lemonos/index.html",
   "ShowHomeButton": true,
   "RestoreOnStartup": 4,
-  "RestoreOnStartupURLs": ["file:///opt/nos/lemonos/index.html"],
-  "NewTabPageLocation": "file:///opt/nos/lemonos/index.html",
+  "RestoreOnStartupURLs": ["http://127.0.0.1:8080/lemonos/index.html"],
+  "NewTabPageLocation": "http://127.0.0.1:8080/lemonos/index.html",
   "BookmarkBarEnabled": true,
   "BrowserSignin": 0,
   "DefaultBrowserSettingEnabled": false,
