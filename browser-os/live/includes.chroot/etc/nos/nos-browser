@@ -1,6 +1,6 @@
 #!/bin/sh
 # Launch Chromium fullscreen. If it ever exits, nodm restarts the session.
-CHROMIUM_FLAGS="--start-fullscreen \
+CHROMIUM_FLAGS="--kiosk \
 --no-first-run \
 --no-default-browser-check \
 --disable-session-crashed-bubble \
