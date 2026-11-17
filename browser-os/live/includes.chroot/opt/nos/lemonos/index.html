@@ -154,6 +154,9 @@
     </div>
   </nav>
 
+  <div class="tray-menu sys-menu" id="sys-menu" hidden>
+    <div id="sys-menu-body"></div>
+  </div>
   <div class="tray-menu" id="tray-menu" hidden>
     <button type="button" data-open="settings">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
@@ -177,6 +180,16 @@
     </button>
     <div class="task-items" id="task-items" aria-label="Open windows"></div>
     <div class="tray">
+      <button class="tray-btn" id="tb-battery" type="button" aria-label="Power and battery">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><rect x="2" y="8" width="16" height="9" rx="2"/><path d="M20 11v3"/><path id="batt-bolt" d="M9 9l-2.5 4H10L7.5 17" style="display:none"/></svg>
+        <span class="tabular" id="tb-batt-pct"></span>
+      </button>
+      <button class="tray-btn" id="tb-wifi" type="button" aria-label="Network">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M2.5 9.5a15 15 0 0 1 19 0"/><path d="M6 13.5a10 10 0 0 1 12 0"/><path d="M9.5 17.5a5 5 0 0 1 5 0"/><circle cx="12" cy="20" r="0.5" fill="currentColor"/></svg>
+      </button>
+      <button class="tray-btn" id="tb-bt" type="button" aria-label="Bluetooth">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M7 7l10 10-5 4V3l5 4L7 17"/></svg>
+      </button>
       <button class="tray-btn" id="tray-btn" type="button" aria-expanded="false" aria-controls="tray-menu" aria-label="Account menu">
         <span class="avatar" id="tray-avatar">U</span>
       </button>
@@ -192,6 +205,7 @@
 <script src="auth.js"></script>
 <script src="windows.js"></script>
 <script src="apps/common.js"></script>
+<script src="apps/systray.js"></script>
 <script src="apps/embed.js"></script>
 <script src="apps/word.js"></script>
 <script src="apps/sheets.js"></script>
@@ -213,7 +227,6 @@
 <script src="apps/artcraft.js"></script>
 <script src="apps/craft.js"></script>
 <script src="apps/community/sourblocks.js"></script>
-<script src="apps/community/hearthchat.js"></script>
 <script src="apps/community/lemonayd.js"></script>
 <script src="apps/community/noisecourt.js"></script>
 <script src="apps/community/panzerclash.js"></script>
@@ -331,6 +344,10 @@
     WM.enterOS();
     if (window.CommunityApps) window.CommunityApps.restore();
     ensureUsernameOnEntry();
+  } else if (!navigator.onLine) {
+    /* completely offline boot: no sign-in possible, go straight to the desktop */
+    Auth.signInGuest();
+    WM.enterOS();
   } else {
     WM.showScreen('lock');
   }

@@ -29,6 +29,7 @@ mkdir -p /etc/systemd/system/multi-user.target.wants
 ln -sf /etc/systemd/system/nos-session.service /etc/systemd/system/multi-user.target.wants/nos-session.service
 echo "nos-hook: session symlink rc=$?"
 ln -sf /etc/systemd/system/nos-bridge.service /etc/systemd/system/multi-user.target.wants/nos-bridge.service
+ln -sf /lib/systemd/system/bluetooth.service /etc/systemd/system/multi-user.target.wants/bluetooth.service
 echo "nos-hook: bridge symlink rc=$?"
 ln -sf /etc/systemd/system/nos-debug.service /etc/systemd/system/multi-user.target.wants/nos-debug.service
 echo "nos-hook: debug symlink rc=$?"

@@ -4009,3 +4009,26 @@ button {
   justify-content: flex-end;
   gap: 8px;
 }
+
+/* nOS system tray menu */
+.sys-menu { min-width: 300px; max-height: 70vh; overflow-y: auto; }
+.sys-section-title {
+  padding: 9px 12px 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-2);
+}
+.sys-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  width: 100%; padding: 9px 12px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink); font: inherit; font-size: 13.5px;
+  text-align: left; cursor: pointer;
+}
+.sys-row:hover { background: rgba(245, 213, 71, 0.08); }
+.sys-row.muted { color: var(--ink-2); cursor: default; }
+.sys-row-right { color: var(--ink-2); font-size: 12.5px; flex: none; }
+.tray-btn { color: var(--ink-2); }
+.tray-btn svg { width: 16px; height: 16px; flex: none; }
+.tray-btn .tabular { font-size: 12.5px; font-weight: 600; }

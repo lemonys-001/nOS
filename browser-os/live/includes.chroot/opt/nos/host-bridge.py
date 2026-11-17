@@ -32,7 +32,10 @@ INSTALL = {'running': False, 'done': False, 'error': '', 'log': []}
 
 
 def run(cmd, **kw):
-    return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    try:
+        return subprocess.run(cmd, capture_output=True, text=True, **kw)
+    except FileNotFoundError:
+        return subprocess.CompletedProcess(cmd, 127, '', 'tool not found')
 
 
 def api_storage():
@@ -53,6 +56,102 @@ def api_disks():
     if r.returncode == 0:
         return json.loads(r.stdout)
     return {'blockdevices': []}
+
+
+def api_battery():
+    out = {'batteries': [], 'ac': False}
+    base = '/sys/class/power_supply'
+    try:
+        for name in sorted(os.listdir(base)):
+            p = os.path.join(base, name)
+            try:
+                with open(p + '/type') as f:
+                    t = f.read().strip()
+            except OSError:
+                continue
+            if t == 'Battery':
+                pct, st = 0, 'unknown'
+                try:
+                    with open(p + '/capacity') as f:
+                        pct = int(f.read().strip())
+                except (OSError, ValueError):
+                    try:
+                        with open(p + '/energy_now') as f:
+                            now = int(f.read().strip())
+                        with open(p + '/energy_full') as f:
+                            full = int(f.read().strip())
+                        pct = int(100 * now / full) if full else 0
+                    except (OSError, ValueError):
+                        pass
+                try:
+                    with open(p + '/status') as f:
+                        st = f.read().strip().lower()
+                except OSError:
+                    pass
+                out['batteries'].append({'name': name, 'pct': pct, 'status': st})
+            elif t == 'Mains':
+                try:
+                    with open(p + '/online') as f:
+                        if f.read().strip() == '1':
+                            out['ac'] = True
+                except OSError:
+                    pass
+    except OSError:
+        pass
+    return out
+
+
+def api_network():
+    out = {'wifi_on': False, 'state': '', 'connections': [], 'networks': []}
+    r = run(['nmcli', '-t', '-f', 'STATE', 'general', 'status'])
+    out['state'] = (r.stdout or '').strip().lower()
+    r = run(['nmcli', '-t', 'radio', 'wifi'])
+    out['wifi_on'] = 'enabled' in (r.stdout or '')
+    r = run(['nmcli', '-t', '-f', 'NAME,DEVICE,TYPE', 'con', 'show', '--active'])
+    for line in (r.stdout or '').splitlines():
+        p = line.split(':')
+        if len(p) >= 2:
+            out['connections'].append({'name': p[0], 'device': p[1]})
+    r = run(['nmcli', '-t', '-f', 'ACTIVE,SSID,SIGNAL,SECURITY', 'dev', 'wifi', 'list', '--rescan', 'no'])
+    for line in (r.stdout or '').splitlines():
+        p = line.split(':')
+        if len(p) < 4:
+            continue
+        active = p[0] == 'yes'
+        security = p[-1]
+        try:
+            signal = int(p[-2])
+        except ValueError:
+            signal = 0
+        ssid = ':'.join(p[1:-2]) if len(p) > 4 else p[1]
+        if ssid:
+            out['networks'].append({'ssid': ssid, 'signal': signal,
+                                    'security': security, 'active': active})
+    seen, uniq = set(), []
+    for n in out['networks']:
+        if n['ssid'] not in seen:
+            seen.add(n['ssid'])
+            uniq.append(n)
+    out['networks'] = uniq
+    return out
+
+
+def api_bluetooth():
+    out = {'powered': False, 'adapter': False, 'devices': []}
+    r = run(['bluetoothctl', 'show'])
+    if r.returncode == 0:
+        out['adapter'] = True
+        out['powered'] = 'Powered: yes' in (r.stdout or '')
+    for sub in ('Connected', 'Devices'):
+        r = run(['bluetoothctl', 'devices', sub])
+        for line in (r.stdout or '').splitlines():
+            p = line.split()
+            if len(p) >= 3 and p[0] == 'Device':
+                mac, name = p[1], ' '.join(p[2:])
+                if not any(d['mac'] == mac for d in out['devices']):
+                    out['devices'].append({'mac': mac, 'name': name,
+                                           'connected': sub == 'Connected'})
+    return out
 
 
 def safe_path(qs, prefixes):
@@ -83,6 +182,15 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(api_storage())
         if u.path == '/api/disks':
             return self.send_json(api_disks())
+        if u.path == '/api/battery':
+            return self.send_json(api_battery())
+        if u.path == '/api/network':
+            return self.send_json(api_network())
+        if u.path == '/api/bluetooth':
+            return self.send_json(api_bluetooth())
+        if u.path == '/api/status':
+            return self.send_json({'battery': api_battery(), 'network': api_network(),
+                                   'bluetooth': api_bluetooth(), 'online': os.path.exists('/run/nm-online') or api_network()['state'] not in ('', 'disconnected', 'asleep')})
         if u.path == '/api/install/status':
             return self.send_json({**{k: v for k, v in INSTALL.items()},
                                    'log': '\n'.join(INSTALL['log'][-40:])})
@@ -198,6 +306,39 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json({'ok': True})
         if u.path == '/api/reboot':
             subprocess.Popen(['systemctl', 'reboot'])
+            return self.send_json({'ok': True})
+        if u.path == '/api/wifi/connect':
+            ssid, pw = body.get('ssid', ''), body.get('pass', '')
+            if not ssid:
+                return self.send_json({'error': 'no ssid'}, 400)
+            cmd = ['nmcli', 'dev', 'wifi', 'connect', ssid]
+            if pw:
+                cmd += ['password', pw]
+            r = run(cmd, timeout=60)
+            if r.returncode:
+                return self.send_json({'error': (r.stderr or r.stdout).strip()[-200:]}, 400)
+            return self.send_json({'ok': True})
+        if u.path == '/api/wifi/toggle':
+            r = run(['nmcli', 'radio', 'wifi', 'on' if body.get('on') else 'off'])
+            return self.send_json({'ok': r.returncode == 0})
+        if u.path == '/api/bluetooth/toggle':
+            r = run(['bluetoothctl', 'power', 'on' if body.get('on') else 'off'], timeout=15)
+            return self.send_json({'ok': r.returncode == 0})
+        if u.path == '/api/bluetooth/scan':
+            run(['bluetoothctl', 'scan', 'on'], timeout=2)
+            time.sleep(6)
+            run(['bluetoothctl', 'scan', 'off'], timeout=5)
+            return self.send_json(api_bluetooth())
+        if u.path == '/api/bluetooth/connect':
+            mac = body.get('mac', '')
+            if not re.fullmatch(r'([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}', mac or ''):
+                return self.send_json({'error': 'bad mac'}, 400)
+            r = run(['bluetoothctl', 'connect', mac], timeout=30)
+            if r.returncode:
+                run(['bluetoothctl', 'trust', mac], timeout=15)
+                r = run(['bluetoothctl', 'connect', mac], timeout=30)
+            if r.returncode:
+                return self.send_json({'error': (r.stderr or r.stdout).strip()[-200:] or 'connection failed'}, 400)
             return self.send_json({'ok': True})
         return self.send_json({'error': 'not found'}, 404)
 
