@@ -42,7 +42,7 @@ echo "Fetching ArtCraft suite for offline bundling..."
 mkdir -p config/includes.chroot/opt/nos/artcraft
 curl -fsSL -o /tmp/artcraft.tar.gz https://codeload.github.com/lemonys-001/artcraft/tar.gz/HEAD
 tar -xzf /tmp/artcraft.tar.gz -C /tmp
-AC=/tmp/artcraft-$(tar -tzf /tmp/artcraft.tar.gz | head -1 | cut -d/ -f2)
+AC=/tmp/$(tar -tzf /tmp/artcraft.tar.gz | head -1 | cut -d/ -f1)
 for app in pdfcraft designcraft effectcraft figcraft cadcraft lightcraft soundcraft; do
   cp -a "$AC/$app" config/includes.chroot/opt/nos/artcraft/
 done
