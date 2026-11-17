@@ -1,0 +1,13 @@
+worker.js
+api.js
+wrangler.jsonc
+package.json
+package-lock.json
+.gitignore
+.assetsignore
+prompt.txt
+README.md
+node_modules
+.wrangler
+functions
+config.txt

@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>nOS — a desktop that lives in a browser tab</title>
+<meta name="description" content="nOS is a browser-based desktop with overlapping windows, a taskbar, built-in apps, and optional account storage. No install required.">
+<meta name="theme-color" content="#0c0d10">
+<meta name="robots" content="index,follow,max-image-preview:large">
+<link rel="canonical" href="https://lemonyss.dpdns.org/">
+<meta property="og:title" content="nOS — a desktop that lives in a browser tab">
+<meta property="og:description" content="A browser desktop with real windows, built-in apps, and optional account storage. Sign in to sync native app data or continue as a guest.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://lemonyss.dpdns.org/">
+<meta property="og:site_name" content="nOS">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="nOS — a desktop that lives in a browser tab">
+<meta name="twitter:description" content="A browser desktop with real windows, built-in apps, and optional account storage.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<meta name="google-adsense-account" content="ca-pub-7923796655263508">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "Organization",
+      "@id": "https://lemonyss.dpdns.org/#org",
+      "name": "nOS",
+      "url": "https://lemonyss.dpdns.org/",
+      "logo": "https://lemonyss.dpdns.org/favicon.svg"
+    },
+    {
+      "@type": "WebSite",
+      "@id": "https://lemonyss.dpdns.org/#website",
+      "url": "https://lemonyss.dpdns.org/",
+      "name": "nOS",
+      "alternateName": ["Lemon OS Web Desktop", "nOS Web Desktop"],
+      "description": "A browser-based desktop with overlapping windows, a taskbar, built-in apps, and optional account storage.",
+      "inLanguage": "en"
+    },
+    {
+      "@type": "WebApplication",
+      "@id": "https://lemonyss.dpdns.org/#app",
+      "name": "nOS",
+      "url": "https://lemonyss.dpdns.org/",
+      "description": "A browser-based desktop with overlapping windows, a taskbar, built-in apps, and optional account storage.",
+      "applicationCategory": "ProductivityApplication",
+      "applicationSubCategory": "Web Desktop",
+      "softwareVersion": "1.0.0",
+      "operatingSystem": "Any",
+      "browserRequirements": "Requires a modern browser with JavaScript enabled",
+      "isAccessibleForFree": true,
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "featureList": [
+        "Overlapping draggable and resizable windows",
+        "Taskbar, start menu, and account tray",
+        "Built-in notes, code editor, files, photos, sheets, slides, and word processor",
+        "Optional Google or email account sync with Cloudflare Workers KV",
+        "Guest mode with local browser storage"
+      ],
+      "publisher": { "@id": "https://lemonyss.dpdns.org/#org" }
+    }
+  ]
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Syne:wght@700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+  <symbol id="lemon-wheel" viewBox="0 0 100 100">
+    <circle class="wheel-rind" cx="50" cy="50" r="49"></circle>
+    <circle class="wheel-pith" cx="50" cy="50" r="41"></circle>
+    <g class="wheel-seg">
+      <path d="M50.42 42.01L51.91 13.55A36.5 36.5 0 0 1 74.42 22.88L55.35 44.05A8 8 0 0 0 50.42 42.01Z"></path>
+      <path d="M55.95 44.65L77.12 25.58A36.5 36.5 0 0 1 86.45 48.09L57.99 49.58A8 8 0 0 0 55.95 44.65Z"></path>
+      <path d="M57.99 50.42L86.45 51.91A36.5 36.5 0 0 1 77.12 74.42L55.95 55.35A8 8 0 0 0 57.99 50.42Z"></path>
+      <path d="M55.35 55.95L74.42 77.12A36.5 36.5 0 0 1 51.91 86.45L50.42 57.99A8 8 0 0 0 55.35 55.95Z"></path>
+      <path d="M49.58 57.99L48.09 86.45A36.5 36.5 0 0 1 25.58 77.12L44.65 55.95A8 8 0 0 0 49.58 57.99Z"></path>
+      <path d="M44.05 55.35L22.88 74.42A36.5 36.5 0 0 1 13.55 51.91L42.01 50.42A8 8 0 0 0 44.05 55.35Z"></path>
+      <path d="M42.01 49.58L13.55 48.09A36.5 36.5 0 0 1 22.88 25.58L44.05 44.65A8 8 0 0 0 42.01 49.58Z"></path>
+      <path d="M44.65 44.05L25.58 22.88A36.5 36.5 0 0 1 48.09 13.55L49.58 42.01A8 8 0 0 0 44.65 44.05Z"></path>
+    </g>
+    <circle class="wheel-core" cx="50" cy="50" r="8"></circle>
+  </symbol>
+</svg>
+
+<div id="landing" hidden></div>
+<section id="lock" class="lock" hidden aria-labelledby="lock-title">
+  <div class="lock-inner">
+    <svg class="wheel" viewBox="0 0 100 100" aria-hidden="true"><use href="#lemon-wheel"></use></svg>
+    <h1 id="lock-title">nOS</h1>
+    <p class="lock-sub">
+      Sign in to keep notes, code, and files synced to your account, or continue as a guest and
+      keep that data in this browser.
+    </p>
+    <p class="lock-clock" id="lock-clock"></p>
+    <div class="lock-actions">
+      <div class="google-host" id="google-host"></div>
+      <button class="btn-ghost" type="button" id="email-btn">Sign in with email</button>
+      <button class="btn-ghost" type="button" id="guest-btn">Continue as guest</button>
+    </div>
+    <div id="email-panel" class="lock-panel" hidden aria-labelledby="email-title">
+      <h2 id="email-title" class="lock-panel-title">Email sign-in</h2>
+      <form id="email-form" class="lock-form" novalidate>
+        <label class="lock-label" for="email-input">Email
+          <input type="email" id="email-input" placeholder="you@example.com" autocomplete="email" spellcheck="false" required>
+        </label>
+        <label class="lock-label" for="password-input">Password
+          <input type="password" id="password-input" placeholder="At least 6 characters" autocomplete="current-password" required>
+        </label>
+        <button class="btn lock-submit" type="submit" id="signin-email-btn">Sign in</button>
+      </form>
+      <p class="lock-panel-alt">New here? <button class="linkish" type="button" id="signup-email-btn">Create an account</button></p>
+      <p class="lock-status lock-panel-status" id="email-status" role="status" aria-live="polite"></p>
+      <button class="btn-ghost lock-back" type="button" id="back-to-lock">← Back to all sign-in options</button>
+    </div>
+    <p class="lock-status" id="lock-status" role="status" aria-live="polite"></p>
+    <p class="lock-hint">
+      Sign in with Google or email to sync notes, code, and files to Cloudflare. Guest data stays in this browser.
+    </p>
+    <p class="lock-hint" id="lock-version"></p>
+  </div>
+</section>
+
+<div id="os" class="os" hidden>
+  <div id="boot" class="boot" hidden>
+    <svg class="wheel" viewBox="0 0 100 100" aria-hidden="true"><use href="#lemon-wheel"></use></svg>
+  </div>
+
+  <div class="desktop" id="desktop">
+    <div class="desktop-icons" id="desktop-icons" aria-label="Desktop icons"></div>
+    <div class="windows-layer" id="windows-layer"></div>
+    <div class="toast-host" id="toast-host" aria-live="polite"></div>
+  </div>
+
+  <nav class="start-menu" id="start-menu" hidden aria-label="Start menu">
+    <div class="start-search">
+      <input type="search" id="start-search" placeholder="Search apps" aria-label="Search apps" spellcheck="false" autocomplete="off">
+    </div>
+    <div class="start-grid" id="start-grid"></div>
+    <div class="start-foot">
+      <div class="start-user" id="start-user-name">Guest User<small id="start-user-meta">Guest session</small></div>
+      <button class="btn-ghost" type="button" data-signout>Sign out</button>
+    </div>
+  </nav>
+
+  <div class="tray-menu" id="tray-menu" hidden>
+    <button type="button" data-open="settings">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/></svg>
+      Settings
+    </button>
+    <button type="button" data-open="about">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></svg>
+      About nOS
+    </button>
+    <hr>
+    <button type="button" class="danger" data-signout>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M15 4h3a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3M10 17l-5-5 5-5M5 12h11"/></svg>
+      Sign out
+    </button>
+  </div>
+
+  <div class="taskbar">
+    <button class="start-btn" id="start-btn" type="button" aria-expanded="false" aria-controls="start-menu">
+      <svg class="wheel" viewBox="0 0 100 100" aria-hidden="true"><use href="#lemon-wheel"></use></svg>
+      Start
+    </button>
+    <div class="task-items" id="task-items" aria-label="Open windows"></div>
+    <div class="tray">
+      <button class="tray-btn" id="tray-btn" type="button" aria-expanded="false" aria-controls="tray-menu" aria-label="Account menu">
+        <span class="avatar" id="tray-avatar">U</span>
+      </button>
+      <button class="clock" id="clock" type="button" aria-label="Date and time">
+        <span id="clock-time" class="tabular">--:--</span>
+        <span class="clock-date" id="clock-date"></span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script src="config.js"></script>
+<script src="auth.js"></script>
+<script src="windows.js"></script>
+<script src="apps/common.js"></script>
+<script src="apps/embed.js"></script>
+<script src="apps/word.js"></script>
+<script src="apps/sheets.js"></script>
+<script src="apps/slides.js"></script>
+<script src="apps/files.js"></script>
+<script src="apps/notes.js"></script>
+<script src="apps/calculator.js"></script>
+<script src="apps/code.js"></script>
+<script src="apps/photo.js"></script>
+<script src="apps/about.js"></script>
+<script src="apps/settings.js"></script>
+<script src="apps/mail.js"></script>
+<script src="apps/browser.js"></script>
+<script src="apps/appstore.js"></script>
+<script src="apps/lemonchat.js"></script>
+<script src="apps/draw.js"></script>
+<script src="apps/photoedit.js"></script>
+<script src="apps/video.js"></script>
+<script src="apps/artcraft.js"></script>
+<script src="apps/craft.js"></script>
+<script>
+(function () {
+  WM.init();
+
+  function launch() {
+    if (Auth.isSignedIn()) WM.enterOS();
+    else WM.showScreen('lock');
+  }
+
+  document.querySelectorAll('[data-launch]').forEach(function (node) {
+    node.addEventListener('click', launch);
+  });
+
+  document.querySelectorAll('[data-open]').forEach(function (node) {
+    node.addEventListener('click', function () {
+      WM.closeStartMenu();
+      WM.open(node.getAttribute('data-open'));
+    });
+  });
+
+  document.getElementById('guest-btn').addEventListener('click', function () {
+    Auth.signInGuest();
+  });
+
+  const lockActions = document.querySelector('.lock-actions');
+  const emailPanel = document.getElementById('email-panel');
+  const emailBtn = document.getElementById('email-btn');
+  const backToLock = document.getElementById('back-to-lock');
+  const emailForm = document.getElementById('email-form');
+  const emailInput = document.getElementById('email-input');
+  const passwordInput = document.getElementById('password-input');
+  const emailTitle = document.getElementById('email-title');
+  const emailPanelAlt = document.querySelector('.lock-panel-alt');
+  const signinEmailBtn = document.getElementById('signin-email-btn');
+  const signupEmailBtn = document.getElementById('signup-email-btn');
+  const emailStatus = document.getElementById('email-status');
+  let emailMode = 'signin';
+
+  function setEmailMode(mode) {
+    emailMode = mode;
+    emailTitle.textContent = mode === 'signup' ? 'Create an account' : 'Email sign-in';
+    signinEmailBtn.textContent = mode === 'signup' ? 'Create account' : 'Sign in';
+    signupEmailBtn.textContent = mode === 'signup' ? 'Sign in' : 'Create an account';
+    emailPanelAlt.firstChild.textContent = mode === 'signup' ? 'Already have an account? ' : 'New here? ';
+    emailStatus.textContent = '';
+  }
+
+  function showLockActions() {
+    emailPanel.hidden = true;
+    lockActions.hidden = false;
+    emailStatus.textContent = '';
+    passwordInput.value = '';
+  }
+
+  function showPanel(panel) {
+    lockActions.hidden = true;
+    emailPanel.hidden = panel !== emailPanel;
+    emailInput.focus();
+  }
+
+  emailBtn.addEventListener('click', function () { showPanel(emailPanel); });
+  backToLock.addEventListener('click', showLockActions);
+
+  signupEmailBtn.addEventListener('click', function () {
+    setEmailMode(emailMode === 'signup' ? 'signin' : 'signup');
+    emailInput.focus();
+  });
+
+  async function attemptEmail(mode) {
+    const email = emailInput.value.trim();
+    const password = passwordInput.value;
+    if (!email || !password) {
+      emailStatus.textContent = 'Enter your email and password.';
+      return;
+    }
+    signinEmailBtn.disabled = true;
+    emailStatus.textContent = mode === 'signup' ? 'Creating your account…' : 'Signing in…';
+    const res = mode === 'signup'
+      ? await Auth.signUpWithEmail(email, password)
+      : await Auth.signInWithEmail(email, password);
+    signinEmailBtn.disabled = false;
+    if (res.ok && res.verify) {
+      setEmailMode('signin');
+      emailStatus.textContent = 'Account created. Check your email to verify, then sign in.';
+      return;
+    }
+    if (res.ok) return;
+    emailStatus.textContent = res.error || 'Sign-in failed.';
+  }
+
+  emailForm.addEventListener('submit', function (e) {
+    e.preventDefault();
+    attemptEmail(emailMode);
+  });
+
+  Auth.attachGoogleButton(document.getElementById('google-host'));
+
+  async function ensureUsernameOnEntry() {
+    const session = Auth.getSession();
+    if (session && session.provider !== 'guest' && !session.username) {
+      await Auth.promptUsername();
+    }
+  }
+
+  document.addEventListener('lemon:signin', async function () {
+    if (window.CommunityApps) window.CommunityApps.restore();
+    await ensureUsernameOnEntry();
+  });
+
+  if (Auth.isSignedIn()) {
+    WM.enterOS();
+    if (window.CommunityApps) window.CommunityApps.restore();
+    ensureUsernameOnEntry();
+  } else {
+    WM.showScreen('lock');
+  }
+})();
+</script>
+</body>
+</html>

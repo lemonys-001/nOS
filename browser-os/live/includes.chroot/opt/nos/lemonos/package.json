@@ -1,0 +1,14 @@
+{
+  "name": "lemonos",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A modular, web-based operating system on Cloudflare Workers.",
+  "scripts": {
+    "preview": "python3 -m http.server 8788",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "3.114.17"
+  }
+}

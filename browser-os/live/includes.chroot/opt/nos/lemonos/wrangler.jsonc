@@ -1,0 +1,16 @@
+{
+  "name": "lemonos",
+  "main": "worker.js",
+  "compatibility_date": "2024-11-01",
+  "assets": {
+    "directory": ".",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "USER_STORAGE",
+      "id": "391d037a05704db0831698819b863e0e"
+    }
+  ]
+}
