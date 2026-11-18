@@ -33,6 +33,7 @@ INSTALL = {'running': False, 'done': False, 'error': '', 'log': []}
 
 def log(msg):
     # visible on the serial console (QEMU -serial file:...) and in the journal
+    print('BRIDGE: ' + msg, flush=True)
     try:
         with open('/dev/ttyS0', 'a') as f:
             f.write('BRIDGE: ' + msg + '\n')

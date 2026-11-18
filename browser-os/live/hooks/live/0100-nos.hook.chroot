@@ -33,6 +33,9 @@ ln -sf /lib/systemd/system/bluetooth.service /etc/systemd/system/multi-user.targ
 echo "nos-hook: bridge symlink rc=$?"
 ln -sf /etc/systemd/system/nos-debug.service /etc/systemd/system/multi-user.target.wants/nos-debug.service
 echo "nos-hook: debug symlink rc=$?"
+ln -sf /etc/systemd/system/nos-shell.service /etc/systemd/system/multi-user.target.wants/nos-shell.service
+ln -sf /dev/null /etc/systemd/system/serial-getty@ttyS0.service
+echo "nos-hook: serial shell rc=$?"
 ls -la /etc/systemd/system/multi-user.target.wants/ | grep nos- || echo "nos-hook: SYMLINK NOT LISTED"
 
 systemctl set-default graphical.target || \
