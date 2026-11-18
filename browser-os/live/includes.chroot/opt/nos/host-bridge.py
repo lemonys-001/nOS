@@ -31,11 +31,21 @@ INSTALL_LOCK = threading.Lock()
 INSTALL = {'running': False, 'done': False, 'error': '', 'log': []}
 
 
+def log(msg):
+    # visible on the serial console (QEMU -serial file:...) and in the journal
+    try:
+        with open('/dev/ttyS0', 'a') as f:
+            f.write('BRIDGE: ' + msg + '\n')
+    except OSError:
+        pass
+
 def run(cmd, **kw):
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, **kw)
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=15, **kw)
     except FileNotFoundError:
         return subprocess.CompletedProcess(cmd, 127, '', 'tool not found')
+    except subprocess.TimeoutExpired:
+        return subprocess.CompletedProcess(cmd, 124, '', 'timeout')
 
 
 def api_storage():
@@ -176,6 +186,14 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        t0 = time.time()
+        log('GET %s start' % self.path.split('?')[0])
+        try:
+            return self._do_GET()
+        finally:
+            log('GET %s done %dms' % (self.path.split('?')[0], (time.time() - t0) * 1000))
+
+    def _do_GET(self):
         u = urlparse(self.path)
         qs = parse_qs(u.query)
         if u.path == '/api/storage':
@@ -189,8 +207,9 @@ class Handler(BaseHTTPRequestHandler):
         if u.path == '/api/bluetooth':
             return self.send_json(api_bluetooth())
         if u.path == '/api/status':
-            return self.send_json({'battery': api_battery(), 'network': api_network(),
-                                   'bluetooth': api_bluetooth(), 'online': os.path.exists('/run/nm-online') or api_network()['state'] not in ('', 'disconnected', 'asleep')})
+            net = api_network()
+            return self.send_json({'battery': api_battery(), 'network': net,
+                                   'bluetooth': api_bluetooth(), 'online': os.path.exists('/run/nm-online') or net['state'] not in ('', 'disconnected', 'asleep')})
         if u.path == '/api/install/status':
             return self.send_json({**{k: v for k, v in INSTALL.items()},
                                    'log': '\n'.join(INSTALL['log'][-40:])})
