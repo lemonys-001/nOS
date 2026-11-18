@@ -12,6 +12,7 @@ read-only machine facts plus the disk installer:
   GET  /api/install/status installer progress
   POST /api/reboot         reboot the machine
 """
+import glob
 import json
 import os
 import re
@@ -41,12 +42,27 @@ def log(msg):
         pass
 
 def run(cmd, **kw):
+    # own session + killpg: dbus autolaunch children keep the pipes open, so
+    # a plain timeout= on subprocess.run would block forever after the kill
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=15, **kw)
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                             text=True, start_new_session=True, **kw)
     except FileNotFoundError:
         return subprocess.CompletedProcess(cmd, 127, '', 'tool not found')
+    try:
+        out, err = p.communicate(timeout=15)
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(cmd, 124, '', 'timeout')
+        try:
+            os.killpg(p.pid, 9)
+        except OSError:
+            p.kill()
+        try:
+            out, err = p.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            out, err = '', ''
+            p.wait()
+        return subprocess.CompletedProcess(cmd, 124, out or '', err or 'timeout')
+    return subprocess.CompletedProcess(cmd, p.returncode, out or '', err or '')
 
 
 def api_storage():
@@ -149,6 +165,9 @@ def api_network():
 
 def api_bluetooth():
     out = {'powered': False, 'adapter': False, 'devices': []}
+    # no adapter in sysfs: bluetoothctl would sit in dbus activation for ~25s
+    if not glob.glob('/sys/class/bluetooth/hci*'):
+        return out
     r = run(['bluetoothctl', 'show'])
     if r.returncode == 0:
         out['adapter'] = True
@@ -209,8 +228,10 @@ class Handler(BaseHTTPRequestHandler):
             return self.send_json(api_bluetooth())
         if u.path == '/api/status':
             net = api_network()
+            bt = api_bluetooth()
+            bt.pop('devices', None)   # tray only needs powered/adapter; keep status fast
             return self.send_json({'battery': api_battery(), 'network': net,
-                                   'bluetooth': api_bluetooth(), 'online': os.path.exists('/run/nm-online') or net['state'] not in ('', 'disconnected', 'asleep')})
+                                   'bluetooth': bt, 'online': os.path.exists('/run/nm-online') or net['state'] not in ('', 'disconnected', 'asleep')})
         if u.path == '/api/install/status':
             return self.send_json({**{k: v for k, v in INSTALL.items()},
                                    'log': '\n'.join(INSTALL['log'][-40:])})
