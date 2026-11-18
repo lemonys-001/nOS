@@ -108,10 +108,10 @@ jobs:
             -serial file:serial.log &
           QPID=$!
           for i in $(seq 1 150); do
-            grep -q NOS_X_READY serial.log 2>/dev/null && break
+            grep -qE 'NOS_X_READY|BRIDGE: GET' serial.log 2>/dev/null && break
             sleep 6
           done
-          if ! grep -q NOS_X_READY serial.log; then
+          if ! grep -qE 'NOS_X_READY|BRIDGE: GET' serial.log; then
             echo "ERROR: X session never became ready"
             tail -n 120 serial.log || true
             kill "$QPID" 2>/dev/null || true
