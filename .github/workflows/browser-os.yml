@@ -132,6 +132,7 @@ jobs:
           sha256sum nOS-browser-amd64.iso > SHA256SUMS
 
       - name: Upload ISO artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: nOS-browser-iso
