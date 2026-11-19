@@ -107,24 +107,34 @@ jobs:
             -monitor unix:/tmp/qmon.sock,server,nowait \
             -serial file:serial.log &
           QPID=$!
+          # the session user cannot write the serial console (agetty owns it),
+          # so wait for the root-run nos-debug dump instead
           for i in $(seq 1 150); do
-            grep -qE 'NOS_X_READY|BRIDGE: GET' serial.log 2>/dev/null && break
+            grep -qE '=== nos-debug round' serial.log 2>/dev/null && break
             sleep 6
           done
-          if ! grep -qE 'NOS_X_READY|BRIDGE: GET' serial.log; then
-            echo "ERROR: X session never became ready"
-            tail -n 120 serial.log || true
-            kill "$QPID" 2>/dev/null || true
-            exit 1
-          fi
           sleep 60   # give Chromium time to render under TCG
           echo screendump /tmp/nos-screen.ppm | socat - UNIX-CONNECT:/tmp/qmon.sock || true
-          sleep 2
+          sleep 3
           kill "$QPID" 2>/dev/null || true
           wait "$QPID" 2>/dev/null || true
           echo "--- Serial output (tail) ---"
           tail -n 120 serial.log || true
           ls -la /tmp/nos-screen.ppm || true
+          python3 - <<'PYCHECK'
+          import sys
+          try:
+              d = open('/tmp/nos-screen.ppm', 'rb').read()
+              hdr = d.split(b'\n', 3)
+              w, h = map(int, hdr[1].split())
+              pix = hdr[3]
+              lit = sum(1 for i in range(0, len(pix) - 2, 3) if pix[i] or pix[i+1] or pix[i+2])
+              print(f'non-black pixels: {lit} of {w*h}')
+              sys.exit(0 if lit > (w * h) // 20 else 1)
+          except Exception as e:
+              print('screendump check failed:', e)
+              sys.exit(1)
+          PYCHECK
 
       - name: Checksums
         run: |
